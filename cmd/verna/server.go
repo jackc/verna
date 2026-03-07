@@ -39,7 +39,7 @@ func checkPrerequisites(client *ssh.Client) []checkResult {
 	// caddy
 	if _, err := client.Run("curl -sf localhost:2019/config/"); err != nil {
 		if _, pathErr := client.Run("which caddy"); pathErr != nil {
-			results = append(results, checkResult{"caddy", false, "caddy not found in PATH"})
+			results = append(results, checkResult{"caddy", false, "admin API not responding and caddy not found in PATH"})
 		} else {
 			results = append(results, checkResult{"caddy", false, "caddy found but admin API not responding on localhost:2019"})
 		}
