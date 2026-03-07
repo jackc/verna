@@ -166,10 +166,10 @@ func newServerInstallCaddyCmd() *cobra.Command {
 			if _, err := client.Run("tar -xzf /tmp/caddy.tar.gz -C /tmp caddy"); err != nil {
 				return fmt.Errorf("extracting caddy: %w", err)
 			}
-			if _, err := client.Run("sudo mv /tmp/caddy /usr/local/bin/caddy"); err != nil {
+			if _, err := client.Run("mv /tmp/caddy /usr/local/bin/caddy"); err != nil {
 				return fmt.Errorf("installing caddy binary: %w", err)
 			}
-			if _, err := client.Run("sudo chmod +x /usr/local/bin/caddy"); err != nil {
+			if _, err := client.Run("chmod +x /usr/local/bin/caddy"); err != nil {
 				return fmt.Errorf("setting caddy permissions: %w", err)
 			}
 			if _, err := client.Run("rm -f /tmp/caddy.tar.gz"); err != nil {
@@ -179,10 +179,10 @@ func newServerInstallCaddyCmd() *cobra.Command {
 			// Create caddy system user.
 			fmt.Println("Creating caddy system user...")
 			// useradd returns exit code 9 if user already exists, which is fine.
-			if _, err := client.Run("id caddy >/dev/null 2>&1 || sudo useradd --system --home /var/lib/caddy --shell /usr/sbin/nologin caddy"); err != nil {
+			if _, err := client.Run("id caddy >/dev/null 2>&1 || useradd --system --home /var/lib/caddy --shell /usr/sbin/nologin caddy"); err != nil {
 				return fmt.Errorf("creating caddy user: %w", err)
 			}
-			if _, err := client.Run("sudo mkdir -p /var/lib/caddy && sudo chown caddy:caddy /var/lib/caddy"); err != nil {
+			if _, err := client.Run("mkdir -p /var/lib/caddy && chown caddy:caddy /var/lib/caddy"); err != nil {
 				return fmt.Errorf("setting up caddy home directory: %w", err)
 			}
 
@@ -209,7 +209,7 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 [Install]
 WantedBy=multi-user.target
 `
-			writeUnitCmd := `cat <<'UNIT_EOF' | sudo tee /etc/systemd/system/caddy.service > /dev/null
+			writeUnitCmd := `cat <<'UNIT_EOF' | tee /etc/systemd/system/caddy.service > /dev/null
 ` + unit + `UNIT_EOF`
 			if _, err := client.Run(writeUnitCmd); err != nil {
 				return fmt.Errorf("writing systemd unit: %w", err)
@@ -217,13 +217,13 @@ WantedBy=multi-user.target
 
 			// Enable and start.
 			fmt.Println("Enabling and starting caddy...")
-			if _, err := client.Run("sudo systemctl daemon-reload"); err != nil {
+			if _, err := client.Run("systemctl daemon-reload"); err != nil {
 				return fmt.Errorf("reloading systemd: %w", err)
 			}
-			if _, err := client.Run("sudo systemctl enable caddy"); err != nil {
+			if _, err := client.Run("systemctl enable caddy"); err != nil {
 				return fmt.Errorf("enabling caddy: %w", err)
 			}
-			if _, err := client.Run("sudo systemctl restart caddy"); err != nil {
+			if _, err := client.Run("systemctl restart caddy"); err != nil {
 				return fmt.Errorf("starting caddy: %w", err)
 			}
 

@@ -36,12 +36,12 @@ Verna is a lightweight deployment tool for compiled web applications (Go, Rust, 
 There is no local configuration file. Server connection is specified via CLI flags:
 
 ```sh
-verna --host prod-1 --user deploy server init
-verna --host prod-1 --user deploy app init myapp --domain myapp.example.com
-verna --host prod-1 --user deploy deploy myapp --binary bin/myapp
+verna --host prod-1 server init
+verna --host prod-1 app init myapp --domain myapp.example.com
+verna --host prod-1 deploy myapp --binary bin/myapp
 ```
 
-Global flags: `--host` (required), `--user` (default: current user), `--port` (default: 22), `--key-file` (optional, also tries SSH agent).
+Global flags: `--host` (required), `--user` (default: root), `--port` (default: 22), `--key-file` (optional, also tries SSH agent).
 
 ### `/var/verna/verna.json` (server config and state)
 
@@ -230,7 +230,7 @@ Built with **cobra** (`github.com/spf13/cobra`).
 | `verna logs <app>` | Tail journald logs (`--slot`, `-f`, `-n`) |
 | `verna prune <app>` | Remove old releases beyond retention count |
 
-Global flags: `--host` (required), `--user` (default: current user), `--port` (default: 22), `--key-file` (optional).
+Global flags: `--host` (required), `--user` (default: root), `--port` (default: 22), `--key-file` (optional).
 
 ---
 
@@ -330,7 +330,7 @@ Pure logic that can be tested in isolation:
 
 The full deploy lifecycle needs a real Ubuntu environment with systemd, Caddy, and SSH. Options for providing one:
 
-1. **Vagrant** (recommended for local dev) — a `Vagrantfile` that provisions an Ubuntu VM with Caddy installed, SSH configured for key-based auth, and a deploy user with the necessary sudoers rules
+1. **Vagrant** (recommended for local dev) — a `Vagrantfile` that provisions an Ubuntu VM with Caddy installed and root SSH configured for key-based auth
 2. **Throwaway cloud instance** — same provisioning via a script, suitable for CI
 3. **Docker with systemd** — use a systemd-capable base image (e.g. `jrei/systemd-ubuntu`), run Caddy inside, SSH to localhost on a mapped port; functional but fights Docker's design
 

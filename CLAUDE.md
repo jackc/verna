@@ -39,7 +39,7 @@ Built with `github.com/spf13/cobra`. Commands: `server init`, `app init`, `deplo
 - Releases are immutable — never modify a release directory after creation
 - Server state (`verna.json`) is a single file for all app config and deployment state, written atomically
 - Caddy upstream switching uses the admin API, not config file rewriting
-- The deploy user needs specific passwordless sudo rules (see README.md)
+- Verna connects as root over SSH (no sudo needed)
 - Applications must read `PORT` env var, serve a health endpoint, and handle `SIGTERM`
 
 ## Keep Up To Date

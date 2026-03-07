@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/user"
 
 	"github.com/spf13/cobra"
 )
@@ -23,13 +22,8 @@ func main() {
 		SilenceErrors: true,
 	}
 
-	currentUser := ""
-	if u, err := user.Current(); err == nil {
-		currentUser = u.Username
-	}
-
 	rootCmd.PersistentFlags().StringVar(&flagHost, "host", "", "SSH host (required)")
-	rootCmd.PersistentFlags().StringVar(&flagUser, "user", currentUser, "SSH user")
+	rootCmd.PersistentFlags().StringVar(&flagUser, "user", "root", "SSH user")
 	rootCmd.PersistentFlags().IntVar(&flagPort, "port", 22, "SSH port")
 	rootCmd.PersistentFlags().StringVar(&flagKeyFile, "key-file", "", "path to SSH private key")
 

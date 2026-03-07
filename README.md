@@ -54,12 +54,12 @@ go build -o verna ./cmd/verna
 There is no local configuration file. Server connection is specified via CLI flags on every command:
 
 ```sh
-verna --host myserver.example.com --user deploy <command>
+verna --host myserver.example.com <command>
 ```
 
 Global flags:
 - `--host` — server hostname (required)
-- `--user` — SSH user (default: current user)
+- `--user` — SSH user (default: root)
 - `--port` — SSH port (default: 22)
 - `--key-file` — path to SSH private key (optional, also tries SSH agent)
 
@@ -118,7 +118,7 @@ Your application must:
 ### Install Caddy
 
 ```sh
-verna --host myserver --user deploy server install-caddy
+verna --host myserver server install-caddy
 ```
 
 Downloads the latest Caddy release from GitHub, installs it to `/usr/local/bin`, creates a `caddy` system user, sets up a systemd unit, and verifies the admin API is responding on `localhost:2019`. Caddy is configured to run with `--resume`, so configuration pushed via the admin API is automatically persisted and restored on restart.
@@ -126,7 +126,7 @@ Downloads the latest Caddy release from GitHub, installs it to `/usr/local/bin`,
 ### Initialize the server
 
 ```sh
-verna --host myserver --user deploy server init
+verna --host myserver server init
 ```
 
 Creates `/var/verna/` and an empty `verna.json` on the server. This is a one-time setup step.
@@ -134,7 +134,7 @@ Creates `/var/verna/` and an empty `verna.json` on the server. This is a one-tim
 ### Initialize an app
 
 ```sh
-verna --host myserver --user deploy app init myapp --domain myapp.example.com
+verna --host myserver app init myapp --domain myapp.example.com
 ```
 
 Creates the directory structure, system user, systemd template unit, and Caddy route on the server. Registers the app in `verna.json` with auto-assigned ports.
@@ -144,19 +144,19 @@ Creates the directory structure, system user, systemd template unit, and Caddy r
 ```sh
 # Build your binary, then deploy it
 GOOS=linux GOARCH=amd64 go build -o bin/myapp .
-verna --host myserver --user deploy deploy myapp --binary bin/myapp --commit $(git rev-parse --short HEAD)
+verna --host myserver deploy myapp --binary bin/myapp --commit $(git rev-parse --short HEAD)
 ```
 
 Or with a pre-built artifact:
 
 ```sh
-verna --host myserver --user deploy deploy myapp --artifact myapp_release.tar.gz
+verna --host myserver deploy myapp --artifact myapp_release.tar.gz
 ```
 
 ### Check status
 
 ```sh
-verna --host myserver --user deploy status myapp
+verna --host myserver status myapp
 ```
 
 ```
@@ -181,7 +181,7 @@ Slot green (port 18002):
 ### Rollback
 
 ```sh
-verna --host myserver --user deploy rollback myapp
+verna --host myserver rollback myapp
 ```
 
 Restarts the previous slot, health checks it, then switches Caddy back.
@@ -189,16 +189,16 @@ Restarts the previous slot, health checks it, then switches Caddy back.
 ### View logs
 
 ```sh
-verna --host myserver --user deploy logs myapp              # active slot
-verna --host myserver --user deploy logs myapp --slot blue  # specific slot
-verna --host myserver --user deploy logs myapp -f           # follow
-verna --host myserver --user deploy logs myapp -n 100       # last 100 lines
+verna --host myserver logs myapp              # active slot
+verna --host myserver logs myapp --slot blue  # specific slot
+verna --host myserver logs myapp -f           # follow
+verna --host myserver logs myapp -n 100       # last 100 lines
 ```
 
 ### Prune old releases
 
 ```sh
-verna --host myserver --user deploy prune myapp
+verna --host myserver prune myapp
 ```
 
 Removes old release directories beyond the retention count (default 5), preserving any release currently referenced by either slot.
@@ -230,27 +230,8 @@ Releases are immutable. Slots are symlinks. Rollback is a symlink swap.
 
 - **Ubuntu** with systemd and journald
 - **Caddy** running with the admin API enabled (default on `localhost:2019`)
-- **SSH access** from your local machine to the server
-- **sudo** access for the deploy user (for systemctl and writing unit files)
+- **Root SSH access** from your local machine to the server
 - **curl** on the server (used for health checks and Caddy API calls)
-
-### Sudoers configuration
-
-The deploy user needs passwordless sudo for systemctl and unit file management:
-
-```
-deploy ALL=(ALL) NOPASSWD: /bin/systemctl restart *
-deploy ALL=(ALL) NOPASSWD: /bin/systemctl stop *@*.service
-deploy ALL=(ALL) NOPASSWD: /bin/systemctl enable *
-deploy ALL=(ALL) NOPASSWD: /bin/systemctl daemon-reload
-deploy ALL=(ALL) NOPASSWD: /bin/systemctl start caddy
-deploy ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/systemd/system/*
-deploy ALL=(ALL) NOPASSWD: /usr/sbin/useradd *
-deploy ALL=(ALL) NOPASSWD: /bin/chown *
-deploy ALL=(ALL) NOPASSWD: /bin/mv /tmp/caddy /usr/local/bin/caddy
-deploy ALL=(ALL) NOPASSWD: /bin/chmod +x /usr/local/bin/caddy
-deploy ALL=(ALL) NOPASSWD: /bin/mkdir -p /var/lib/caddy
-```
 
 ## Artifact format
 
@@ -280,7 +261,7 @@ The `manifest.json` records the app name, release ID, git commit, build time, OS
 ```sh
 # In your CI pipeline:
 GOOS=linux GOARCH=amd64 go build -o bin/myapp .
-verna --host myserver --user deploy deploy myapp --binary bin/myapp --commit $CI_COMMIT_SHA
+verna --host myserver deploy myapp --binary bin/myapp --commit $CI_COMMIT_SHA
 ```
 
 ## Design decisions
