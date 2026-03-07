@@ -1,0 +1,7 @@
+{
+	"name": "verna",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "app",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "postCreateCommand": ".devcontainer/post-create.bash"
+}
