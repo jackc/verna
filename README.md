@@ -115,6 +115,14 @@ Your application must:
 
 ## Usage
 
+### Install Caddy
+
+```sh
+verna --host myserver --user deploy server install-caddy
+```
+
+Downloads the latest Caddy release from GitHub, installs it to `/usr/local/bin`, creates a `caddy` system user, sets up a systemd unit, and verifies the admin API is responding on `localhost:2019`. Caddy is configured to run with `--resume`, so configuration pushed via the admin API is automatically persisted and restored on restart.
+
 ### Initialize the server
 
 ```sh
@@ -231,13 +239,17 @@ Releases are immutable. Slots are symlinks. Rollback is a symlink swap.
 The deploy user needs passwordless sudo for systemctl and unit file management:
 
 ```
-deploy ALL=(ALL) NOPASSWD: /bin/systemctl restart *@*.service
+deploy ALL=(ALL) NOPASSWD: /bin/systemctl restart *
 deploy ALL=(ALL) NOPASSWD: /bin/systemctl stop *@*.service
-deploy ALL=(ALL) NOPASSWD: /bin/systemctl enable *@*.service
+deploy ALL=(ALL) NOPASSWD: /bin/systemctl enable *
 deploy ALL=(ALL) NOPASSWD: /bin/systemctl daemon-reload
-deploy ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/systemd/system/*@.service
+deploy ALL=(ALL) NOPASSWD: /bin/systemctl start caddy
+deploy ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/systemd/system/*
 deploy ALL=(ALL) NOPASSWD: /usr/sbin/useradd *
 deploy ALL=(ALL) NOPASSWD: /bin/chown *
+deploy ALL=(ALL) NOPASSWD: /bin/mv /tmp/caddy /usr/local/bin/caddy
+deploy ALL=(ALL) NOPASSWD: /bin/chmod +x /usr/local/bin/caddy
+deploy ALL=(ALL) NOPASSWD: /bin/mkdir -p /var/lib/caddy
 ```
 
 ## Artifact format

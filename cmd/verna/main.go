@@ -38,6 +38,7 @@ func main() {
 		Short: "Server management commands",
 	}
 	serverCmd.AddCommand(newServerInitCmd())
+	serverCmd.AddCommand(newServerInstallCaddyCmd())
 	serverCmd.AddCommand(newServerDoctorCmd())
 
 	rootCmd.AddCommand(serverCmd)
