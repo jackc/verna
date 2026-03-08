@@ -56,8 +56,8 @@ All app configuration and deployment state lives on the server in a single file,
       "health_check_path": "/health",
       "health_check_timeout": 15,
       "release_retention": 5,
-      "user": "myapp",
-      "group": "myapp",
+      "user": "verna-myapp",
+      "group": "verna-myapp",
       "env": {
         "DATABASE_URL": "postgres://..."
       },
@@ -121,8 +121,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=myapp
-Group=myapp
+User=verna-myapp
+Group=verna-myapp
 WorkingDirectory=/var/verna/apps/myapp/slots/%i
 EnvironmentFile=-/var/verna/apps/myapp/slots/%i/env/runtime.env
 ExecStart=/var/verna/apps/myapp/slots/%i/bin/myapp
@@ -290,13 +290,13 @@ verna/
 - Create empty `verna.json`
 - Verify prerequisites (systemd, Caddy running, curl available)
 
-### Phase 5: App init (`verna app init`)
+### Phase 5: App init (`verna app init`) ✓
 - Create app directory structure (`releases/`, `slots/`, `shared/`)
-- Create app system user/group
+- Create app system user/group (`verna-<appname>` to avoid collisions with existing system users)
 - Generate and install systemd template unit
-- Write initial slot env files
-- Configure initial Caddy route
-- Register app in `verna.json`
+- Configure initial Caddy route (via admin API, with server bootstrap)
+- Register app in `verna.json` with allocated ports
+- Flags: `--domain` (required, repeatable), `--health-check-path`, `--health-check-timeout`, `--release-retention`, `--exec-arg`
 
 ### Phase 6: Artifact packaging
 - Create tarball from binary + assets

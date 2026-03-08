@@ -35,7 +35,11 @@ func main() {
 	serverCmd.AddCommand(newServerInstallCaddyCmd())
 	serverCmd.AddCommand(newServerDoctorCmd())
 
+	appCmd := newAppCmd()
+	appCmd.AddCommand(newAppInitCmd())
+
 	rootCmd.AddCommand(serverCmd)
+	rootCmd.AddCommand(appCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
