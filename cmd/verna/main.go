@@ -38,6 +38,13 @@ func main() {
 	appCmd := newAppCmd()
 	appCmd.AddCommand(newAppInitCmd())
 
+	envCmd := newEnvCmd()
+	envCmd.AddCommand(newEnvListCmd())
+	envCmd.AddCommand(newEnvGetCmd())
+	envCmd.AddCommand(newEnvSetCmd())
+	envCmd.AddCommand(newEnvUnsetCmd())
+	appCmd.AddCommand(envCmd)
+
 	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(appCmd)
 

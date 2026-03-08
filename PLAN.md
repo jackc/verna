@@ -224,6 +224,10 @@ Built with **cobra** (`github.com/spf13/cobra`).
 |---------|-------------|
 | `verna server init` | Initialize verna on the server (create `/var/verna/`, `verna.json`) |
 | `verna app init <app>` | Set up an app on the server (dirs, systemd unit, Caddy route, user) |
+| `verna app env list <app>` | List all environment variables |
+| `verna app env get <app> <key>` | Get the value of an environment variable |
+| `verna app env set <app> KEY=VAL` | Set env vars, restart active slot |
+| `verna app env unset <app> KEY` | Remove env vars, restart active slot |
 | `verna deploy <app>` | Package artifact, upload, activate on inactive slot |
 | `verna status <app>` | Show active slot, current release, health |
 | `verna rollback <app>` | Switch traffic back to the previous slot |
@@ -297,6 +301,14 @@ verna/
 - Configure initial Caddy route (via admin API, with server bootstrap)
 - Register app in `verna.json` with allocated ports
 - Flags: `--domain` (required, repeatable), `--health-check-path`, `--health-check-timeout`, `--release-retention`, `--exec-arg`
+
+### Phase 5.5: Environment variable management (`verna app env`) ✓
+- `app env list <app>` — list all env vars (sorted `KEY=value`)
+- `app env get <app> <key>` — print single value (scriptable)
+- `app env set <app> KEY=VAL [...]` — set vars, write runtime.env, restart active slot
+- `app env unset <app> KEY [...]` — remove vars, write runtime.env, restart active slot
+- Reusable `FormatRuntimeEnv` / `WriteRuntimeEnv` in `internal/server/env.go` for deploy command to reuse
+- PORT is reserved and always managed by verna
 
 ### Phase 6: Artifact packaging
 - Create tarball from binary + assets

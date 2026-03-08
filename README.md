@@ -103,7 +103,7 @@ The server state file tracks all app configuration and deployment state:
 }
 ```
 
-Port pairs are auto-assigned during `app init`. For secrets, use systemd's `EnvironmentFile=` directive — place a file on the server at the slot's `env/runtime.env` path.
+Port pairs are auto-assigned during `app init`. Environment variables are managed via `verna app env set` and written to each slot's `env/runtime.env` automatically.
 
 ## Application contract
 
@@ -138,6 +138,24 @@ verna --host myserver app init myapp --domain myapp.example.com
 ```
 
 Creates the directory structure, system user, systemd template unit, and Caddy route on the server. Registers the app in `verna.json` with auto-assigned ports.
+
+### Manage environment variables
+
+```sh
+# Set one or more variables (restarts the active slot)
+verna --host myserver app env set myapp DATABASE_URL=postgres://localhost/myapp SECRET_KEY=hunter2
+
+# List all variables
+verna --host myserver app env list myapp
+
+# Get a single variable (scriptable)
+verna --host myserver app env get myapp DATABASE_URL
+
+# Remove a variable (restarts the active slot)
+verna --host myserver app env unset myapp SECRET_KEY
+```
+
+Environment variables are stored in `verna.json` and written to each slot's `env/runtime.env` file. The `PORT` variable is reserved and managed automatically by verna.
 
 ### Deploy
 

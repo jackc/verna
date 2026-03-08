@@ -32,7 +32,7 @@ Each app has two slots (blue/green) with auto-assigned ports. Slots are symlinks
 The deploy targets the inactive slot: upload tarball, unpack to release dir, update symlink, write env file, restart systemd unit, health check, then atomically switch Caddy's upstream via its admin API (localhost:2019). If anything fails before the Caddy switch, the old slot stays live.
 
 ### CLI
-Built with `github.com/spf13/cobra`. Commands: `server init`, `app init`, `deploy`, `status`, `rollback`, `logs`, `prune`.
+Built with `github.com/spf13/cobra`. Commands: `server init`, `app init`, `app env {list,get,set,unset}`, `deploy`, `status`, `rollback`, `logs`, `prune`.
 
 ## Key Design Constraints
 
