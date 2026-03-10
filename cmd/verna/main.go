@@ -7,6 +7,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Set by goreleaser at build time.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 var (
 	flagSSHHost    string
 	flagSSHUser    string
@@ -54,6 +61,16 @@ func main() {
 
 	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(appCmd)
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Print the version information",
+		Args:  cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("verna version %s\n", version)
+			fmt.Printf("  commit: %s\n", commit)
+			fmt.Printf("  built:  %s\n", date)
+		},
+	})
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
