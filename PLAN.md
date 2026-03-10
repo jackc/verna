@@ -224,6 +224,7 @@ Built with **cobra** (`github.com/spf13/cobra`).
 |---------|-------------|
 | `verna server init` | Initialize verna on the server (create `/var/verna/`, `verna.json`) |
 | `verna app init <app>` | Set up an app on the server (dirs, systemd unit, Caddy route, user) |
+| `verna app set <app>` | Update app settings (domains, health check, retention, exec args) |
 | `verna app env list <app>` | List all environment variables |
 | `verna app env get <app> <key>` | Get the value of an environment variable |
 | `verna app env set <app> KEY=VAL` | Set env vars, restart active slot |
@@ -310,13 +311,21 @@ verna/
 - Reusable `FormatRuntimeEnv` / `WriteRuntimeEnv` in `internal/server/env.go` for deploy command to reuse
 - PORT is reserved and always managed by verna
 
-### Phase 6: Artifact packaging
-- Create tarball from binary + assets
-- Generate `manifest.json` with commit, timestamp, arch
+### Phase 6: Artifact packaging ✓
+- `internal/deploy/artifact.go` — `BuildArtifact()` creates `.tar.gz` in memory with `manifest.json`, `bin/<app>`, optional `public/` dir
+- `Manifest` struct includes `has_public` field for Phase 7 Caddy static asset routing
+- `GenerateReleaseID()` produces `YYYYMMDDTHHMMSSZ-<commit7>` format
+- `cmd/verna/deploy.go` — command skeleton with `--binary`, `--public`, `--commit`, `--os`, `--arch` flags
+- Auto-detects git commit if `--commit` not provided
+- Caddy static asset strategy designed: `/assets/*` gets immutable cache, other static files get `no-cache` with `pass_thru` to reverse proxy
 
-### Phase 7: Deploy command
-- Implement the full deploy state machine
-- Fail-safe: abort without switching if health check fails
+### Phase 7: Deploy command ✓
+- `internal/deploy/deploy.go` — 12-step deploy state machine: upload, unpack, chown, symlink, env, systemd restart, health check, Caddy switch, stop old slot, update state, prune
+- `internal/health/health.go` — `WaitForHealthy()` polls health endpoint over SSH with 500ms interval
+- `internal/caddy/caddy.go` — `UpdateAppRoute()` replaces route via PUT `/id/verna_<app>`; `buildRouteWithPublicJSON()` creates subroute with `/assets/*` immutable cache, `file_server` with `pass_thru` + `no-cache`, and `reverse_proxy` fallback
+- Fail-safe: if health check fails, failed slot is stopped, old slot stays live, state unchanged
+- Auto-prunes old releases beyond retention after successful deploy
+- `selectReleasesToPrune()` extracted as testable pure function
 
 ### Phase 8: Supporting commands
 - `status` — read verna.json, check systemd unit status, health check

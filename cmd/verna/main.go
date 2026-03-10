@@ -37,6 +37,7 @@ func main() {
 
 	appCmd := newAppCmd()
 	appCmd.AddCommand(newAppInitCmd())
+	appCmd.AddCommand(newAppSetCmd())
 
 	envCmd := newEnvCmd()
 	envCmd.AddCommand(newEnvListCmd())
@@ -47,6 +48,7 @@ func main() {
 
 	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(appCmd)
+	rootCmd.AddCommand(newDeployCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
