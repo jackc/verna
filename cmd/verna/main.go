@@ -8,10 +8,10 @@ import (
 )
 
 var (
-	flagHost    string
-	flagUser    string
-	flagPort    int
-	flagKeyFile string
+	flagSSHHost    string
+	flagSSHUser    string
+	flagSSHPort    int
+	flagSSHKeyFile string
 )
 
 func main() {
@@ -22,10 +22,10 @@ func main() {
 		SilenceErrors: true,
 	}
 
-	rootCmd.PersistentFlags().StringVar(&flagHost, "host", "", "SSH host (required)")
-	rootCmd.PersistentFlags().StringVar(&flagUser, "user", "root", "SSH user")
-	rootCmd.PersistentFlags().IntVar(&flagPort, "port", 22, "SSH port")
-	rootCmd.PersistentFlags().StringVar(&flagKeyFile, "key-file", "", "path to SSH private key")
+	rootCmd.PersistentFlags().StringVar(&flagSSHHost, "ssh-host", "", "SSH host (required)")
+	rootCmd.PersistentFlags().StringVar(&flagSSHUser, "ssh-user", "root", "SSH user")
+	rootCmd.PersistentFlags().IntVar(&flagSSHPort, "ssh-port", 22, "SSH port")
+	rootCmd.PersistentFlags().StringVar(&flagSSHKeyFile, "ssh-key-file", "", "path to SSH private key")
 
 	serverCmd := &cobra.Command{
 		Use:   "server",

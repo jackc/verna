@@ -61,14 +61,14 @@ func printCheckResults(results []checkResult) {
 }
 
 func connectToServer() (*ssh.Client, error) {
-	if flagHost == "" {
-		return nil, fmt.Errorf("--host is required")
+	if flagSSHHost == "" {
+		return nil, fmt.Errorf("--ssh-host is required")
 	}
 	return ssh.Connect(ssh.ConnectConfig{
-		Host:    flagHost,
-		User:    flagUser,
-		Port:    flagPort,
-		KeyFile: flagKeyFile,
+		Host:    flagSSHHost,
+		User:    flagSSHUser,
+		Port:    flagSSHPort,
+		KeyFile: flagSSHKeyFile,
 	})
 }
 
