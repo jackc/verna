@@ -36,12 +36,14 @@ Verna is a lightweight deployment tool for compiled web applications (Go, Rust, 
 There is no local configuration file. Server connection is specified via CLI flags:
 
 ```sh
-verna --host prod-1 server init
-verna --host prod-1 app init myapp --domain myapp.example.com
-verna --host prod-1 deploy myapp --binary bin/myapp
+verna --ssh-host prod-1 server init
+verna --ssh-host prod-1 app --app myapp init --domain myapp.example.com
+verna --ssh-host prod-1 app --app myapp deploy --binary bin/myapp
 ```
 
-Global flags: `--host` (required), `--user` (default: root), `--port` (default: 22), `--key-file` (optional, also tries SSH agent).
+Global flags: `--ssh-host` (required), `--ssh-user` (default: root), `--ssh-port` (default: 22), `--ssh-key-file` (optional, also tries SSH agent). All support `VERNA_` env var equivalents (e.g. `VERNA_SSH_HOST`).
+
+App flag: `--app` (on the `app` command, inherited by subcommands), also settable via `VERNA_APP`.
 
 ### `/var/verna/verna.json` (server config and state)
 
@@ -223,19 +225,21 @@ Built with **cobra** (`github.com/spf13/cobra`).
 | Command | Description |
 |---------|-------------|
 | `verna server init` | Initialize verna on the server (create `/var/verna/`, `verna.json`) |
-| `verna app init <app>` | Set up an app on the server (dirs, systemd unit, Caddy route, user) |
-| `verna app set <app>` | Update app settings (domains, health check, retention, exec args) |
-| `verna app env list <app>` | List all environment variables |
-| `verna app env get <app> <key>` | Get the value of an environment variable |
-| `verna app env set <app> KEY=VAL` | Set env vars, restart active slot |
-| `verna app env unset <app> KEY` | Remove env vars, restart active slot |
-| `verna deploy <app>` | Package artifact, upload, activate on inactive slot |
+| `verna app init` | Set up an app on the server (dirs, systemd unit, Caddy route, user) |
+| `verna app set` | Update app settings (domains, health check, retention, exec args) |
+| `verna app env list` | List all environment variables |
+| `verna app env get <key>` | Get the value of an environment variable |
+| `verna app env set KEY=VAL` | Set env vars, restart active slot |
+| `verna app env unset KEY` | Remove env vars, restart active slot |
+| `verna app deploy` | Package artifact, upload, activate on inactive slot |
 | `verna status <app>` | Show active slot, current release, health |
 | `verna rollback <app>` | Switch traffic back to the previous slot |
 | `verna logs <app>` | Tail journald logs (`--slot`, `-f`, `-n`) |
 | `verna prune <app>` | Remove old releases beyond retention count |
 
-Global flags: `--host` (required), `--user` (default: root), `--port` (default: 22), `--key-file` (optional).
+Global flags: `--ssh-host` (required), `--ssh-user` (default: root), `--ssh-port` (default: 22), `--ssh-key-file` (optional). All support `VERNA_` env vars.
+
+App flag: `--app` on the `app` command (inherited by all subcommands), also `VERNA_APP`.
 
 ---
 

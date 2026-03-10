@@ -20,7 +20,7 @@ go test -run TestName ./internal/server/  # run a single test
 ## Architecture
 
 ### No local config file
-Server connection is specified via CLI flags (`--host`, `--user`, `--port`, `--key-file`). All app configuration and deployment state lives server-side in `/var/verna/verna.json`, modified via CLI commands.
+Server connection is specified via CLI flags (`--ssh-host`, `--ssh-user`, `--ssh-port`, `--ssh-key-file`) or corresponding `VERNA_` environment variables. The target app is specified via `--app` flag or `VERNA_APP` env var on the `app` command. All app configuration and deployment state lives server-side in `/var/verna/verna.json`, modified via CLI commands.
 
 ### SSH transport
 All server operations use `golang.org/x/crypto/ssh`. File uploads stream tarballs into remote commands (no SFTP). State file reads/writes use `cat` and write-to-temp-then-rename over SSH.
@@ -32,7 +32,7 @@ Each app has two slots (blue/green) with auto-assigned ports. Slots are symlinks
 The deploy targets the inactive slot: upload tarball, unpack to release dir, update symlink, write env file, restart systemd unit, health check, then atomically switch Caddy's upstream via its admin API (localhost:2019). If anything fails before the Caddy switch, the old slot stays live.
 
 ### CLI
-Built with `github.com/spf13/cobra`. Commands: `server init`, `app init`, `app set`, `app env {list,get,set,unset}`, `deploy`, `status`, `rollback`, `logs`, `prune`.
+Built with `github.com/spf13/cobra`. Commands: `server init`, `app init`, `app set`, `app env {list,get,set,unset}`, `app deploy`, `status`, `rollback`, `logs`, `prune`.
 
 ## Key Design Constraints
 

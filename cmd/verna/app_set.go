@@ -19,12 +19,15 @@ func newAppSetCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "set <appname>",
+		Use:   "set",
 		Short: "Update application settings",
 		Long:  "Updates app configuration in verna.json. Changes to --domain update the Caddy route. Changes to --exec-arg regenerate the systemd unit and restart the active slot.",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appName := args[0]
+			appName, err := requireApp()
+			if err != nil {
+				return err
+			}
 
 			// Check that at least one flag was provided.
 			flags := cmd.Flags()

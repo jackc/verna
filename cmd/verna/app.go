@@ -10,13 +10,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var validAppName = regexp.MustCompile(`^[a-z]([a-z0-9-]*[a-z0-9])?$`)
+var (
+	validAppName = regexp.MustCompile(`^[a-z]([a-z0-9-]*[a-z0-9])?$`)
+	flagApp      string
+)
 
 func newAppCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "app",
 		Short: "Application management commands",
 	}
+	cmd.PersistentFlags().StringVar(&flagApp, "app", "", "application name (env: VERNA_APP)")
+	return cmd
+}
+
+func requireApp() (string, error) {
+	if flagApp == "" {
+		return "", fmt.Errorf("--app is required (or set VERNA_APP)")
+	}
+	return flagApp, nil
 }
 
 func newAppInitCmd() *cobra.Command {
@@ -29,12 +41,15 @@ func newAppInitCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "init <appname>",
+		Use:   "init",
 		Short: "Initialize an application on the server",
 		Long:  "Creates directories, system user, systemd unit, Caddy route, and registers the app in verna.json.",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appName := args[0]
+			appName, err := requireApp()
+			if err != nil {
+				return err
+			}
 
 			// Validate app name.
 			if !validAppName.MatchString(appName) {

@@ -50,9 +50,10 @@ func main() {
 	envCmd.AddCommand(newEnvUnsetCmd())
 	appCmd.AddCommand(envCmd)
 
+	appCmd.AddCommand(newDeployCmd())
+
 	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(appCmd)
-	rootCmd.AddCommand(newDeployCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -69,10 +70,11 @@ func applyEnvDefaults(cmd *cobra.Command) {
 		{"ssh-user", "VERNA_SSH_USER"},
 		{"ssh-port", "VERNA_SSH_PORT"},
 		{"ssh-key-file", "VERNA_SSH_KEY_FILE"},
+		{"app", "VERNA_APP"},
 	}
 
 	for _, ef := range envFlags {
-		f := cmd.Root().PersistentFlags().Lookup(ef.flag)
+		f := cmd.Flags().Lookup(ef.flag)
 		if f == nil || f.Changed {
 			continue
 		}

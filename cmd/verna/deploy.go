@@ -20,11 +20,14 @@ func newDeployCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "deploy <app>",
+		Use:   "deploy",
 		Short: "Deploy an application to the server",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appName := args[0]
+			appName, err := requireApp()
+			if err != nil {
+				return err
+			}
 
 			// Auto-detect commit if not provided.
 			if commit == "" {

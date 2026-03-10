@@ -19,11 +19,14 @@ func newEnvCmd() *cobra.Command {
 
 func newEnvListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list <app>",
+		Use:   "list",
 		Short: "List all environment variables",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appName := args[0]
+			appName, err := requireApp()
+			if err != nil {
+				return err
+			}
 
 			client, err := connectToServer()
 			if err != nil {
@@ -57,12 +60,15 @@ func newEnvListCmd() *cobra.Command {
 
 func newEnvGetCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "get <app> <key>",
+		Use:   "get <key>",
 		Short: "Get the value of an environment variable",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appName := args[0]
-			key := args[1]
+			appName, err := requireApp()
+			if err != nil {
+				return err
+			}
+			key := args[0]
 
 			client, err := connectToServer()
 			if err != nil {
@@ -93,16 +99,19 @@ func newEnvGetCmd() *cobra.Command {
 
 func newEnvSetCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "set <app> KEY=VAL [KEY2=VAL2 ...]",
+		Use:   "set KEY=VAL [KEY2=VAL2 ...]",
 		Short: "Set one or more environment variables",
 		Long:  "Sets environment variables and restarts the active slot if deployed.",
-		Args:  cobra.MinimumNArgs(2),
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appName := args[0]
+			appName, err := requireApp()
+			if err != nil {
+				return err
+			}
 
 			// Parse KEY=VAL pairs.
 			pairs := make(map[string]string)
-			for _, arg := range args[1:] {
+			for _, arg := range args {
 				idx := strings.IndexByte(arg, '=')
 				if idx < 0 {
 					return fmt.Errorf("invalid argument %q: expected KEY=VAL format", arg)
@@ -153,13 +162,16 @@ func newEnvSetCmd() *cobra.Command {
 
 func newEnvUnsetCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "unset <app> KEY [KEY2 ...]",
+		Use:   "unset KEY [KEY2 ...]",
 		Short: "Remove one or more environment variables",
 		Long:  "Removes environment variables and restarts the active slot if deployed.",
-		Args:  cobra.MinimumNArgs(2),
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appName := args[0]
-			keys := args[1:]
+			appName, err := requireApp()
+			if err != nil {
+				return err
+			}
+			keys := args
 
 			for _, key := range keys {
 				if key == "PORT" {
