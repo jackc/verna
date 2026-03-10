@@ -58,6 +58,7 @@ func main() {
 	appCmd.AddCommand(envCmd)
 
 	appCmd.AddCommand(newDeployCmd())
+	appCmd.AddCommand(newAppDeleteCmd())
 
 	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(appCmd)

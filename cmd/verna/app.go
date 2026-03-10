@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 	"regexp"
+	"strings"
 
 	"github.com/jackc/verna/internal/caddy"
 	"github.com/jackc/verna/internal/server"
@@ -245,6 +248,95 @@ func newAppInitCmd() *cobra.Command {
 	cmd.Flags().IntVar(&healthCheckTimeout, "health-check-timeout", 15, "health check timeout in seconds")
 	cmd.Flags().IntVar(&releaseRetention, "release-retention", 5, "number of releases to retain")
 	cmd.Flags().StringArrayVar(&execArgs, "exec-arg", nil, "argument to append to the binary in ExecStart (repeatable)")
+
+	return cmd
+}
+
+func newAppDeleteCmd() *cobra.Command {
+	var yes bool
+
+	cmd := &cobra.Command{
+		Use:   "delete",
+		Short: "Delete an application from the server",
+		Long:  "Stops services, removes systemd unit, Caddy route, app directory, and state entry. Does not remove the OS user.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			appName, err := requireApp()
+			if err != nil {
+				return err
+			}
+
+			client, err := connectToServer()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+
+			state, err := server.ReadState(client, defaultRootDir)
+			if err != nil {
+				return fmt.Errorf("reading server state: %w", err)
+			}
+
+			if _, exists := state.Apps[appName]; !exists {
+				return fmt.Errorf("app %q does not exist", appName)
+			}
+
+			if !yes {
+				fmt.Printf("This will permanently delete app %q:\n", appName)
+				fmt.Printf("  - Stop systemd services (%s@blue, %s@green)\n", appName, appName)
+				fmt.Printf("  - Remove systemd unit file\n")
+				fmt.Printf("  - Remove Caddy route\n")
+				fmt.Printf("  - Delete app directory (%s/apps/%s/)\n", defaultRootDir, appName)
+				fmt.Printf("  - Remove app from verna.json\n")
+				fmt.Print("\nAre you sure? [y/N] ")
+
+				reader := bufio.NewReader(os.Stdin)
+				answer, _ := reader.ReadString('\n')
+				if strings.TrimSpace(strings.ToLower(answer)) != "y" {
+					fmt.Println("Aborted.")
+					return nil
+				}
+			}
+
+			// Stop systemd services (ignore errors — may not be running).
+			fmt.Println("Stopping services...")
+			client.Run(fmt.Sprintf("systemctl stop %s@blue.service %s@green.service", appName, appName))
+
+			// Remove systemd unit file.
+			fmt.Println("Removing systemd unit...")
+			unitPath := fmt.Sprintf("/etc/systemd/system/%s@.service", appName)
+			if _, err := client.Run(fmt.Sprintf("rm -f %s", unitPath)); err != nil {
+				return fmt.Errorf("removing systemd unit: %w", err)
+			}
+			if _, err := client.Run("systemctl daemon-reload"); err != nil {
+				return fmt.Errorf("reloading systemd: %w", err)
+			}
+
+			// Remove Caddy route (ignore errors — route may not exist).
+			fmt.Println("Removing Caddy route...")
+			if err := caddy.DeleteAppRoute(client, appName); err != nil {
+				fmt.Printf("  Warning: could not remove Caddy route: %v\n", err)
+			}
+
+			// Remove app directory.
+			fmt.Println("Removing app directory...")
+			appDir := fmt.Sprintf("%s/apps/%s", defaultRootDir, appName)
+			if _, err := client.Run(fmt.Sprintf("rm -rf %s", appDir)); err != nil {
+				return fmt.Errorf("removing app directory: %w", err)
+			}
+
+			// Remove app from state.
+			delete(state.Apps, appName)
+			if err := server.WriteState(client, defaultRootDir, state); err != nil {
+				return fmt.Errorf("writing server state: %w", err)
+			}
+
+			fmt.Printf("\nApp %s deleted.\n", appName)
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip confirmation prompt")
 
 	return cmd
 }

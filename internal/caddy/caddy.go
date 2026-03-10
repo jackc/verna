@@ -69,6 +69,16 @@ func UpdateAppRoute(client *ssh.Client, cfg RouteConfig) error {
 	return nil
 }
 
+// DeleteAppRoute removes the Caddy route for the app via the admin API.
+func DeleteAppRoute(client *ssh.Client, appName string) error {
+	id := "verna_" + appName
+	cmd := fmt.Sprintf("curl -sf -X DELETE http://localhost:2019/id/%s", id)
+	if _, err := client.Run(cmd); err != nil {
+		return fmt.Errorf("deleting Caddy route for %s: %w", appName, err)
+	}
+	return nil
+}
+
 func buildRouteJSON(cfg RouteConfig) ([]byte, error) {
 	route := map[string]any{
 		"@id": "verna_" + cfg.AppName,
