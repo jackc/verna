@@ -8,8 +8,8 @@ import (
 func TestGenerateTemplateUnit(t *testing.T) {
 	cfg := UnitConfig{
 		AppName: "myapp",
-		User:    "verna-myapp",
-		Group:   "verna-myapp",
+		User:    "myapp",
+		Group:   "myapp",
 		RootDir: "/var/lib/verna",
 	}
 
@@ -23,8 +23,8 @@ func TestGenerateTemplateUnit(t *testing.T) {
 		expected string
 	}{
 		{"description", "Description=myapp (%i)"},
-		{"user", "User=verna-myapp"},
-		{"group", "Group=verna-myapp"},
+		{"user", "User=myapp"},
+		{"group", "Group=myapp"},
 		{"working dir", "WorkingDirectory=/var/lib/verna/apps/myapp/slots/%i"},
 		{"env file", "EnvironmentFile=-/var/lib/verna/apps/myapp/slots/%i/env/runtime.env"},
 		{"exec start", "ExecStart=/var/lib/verna/apps/myapp/slots/%i/bin/myapp"},
@@ -43,8 +43,8 @@ func TestGenerateTemplateUnit(t *testing.T) {
 func TestGenerateTemplateUnitWithExecArgs(t *testing.T) {
 	cfg := UnitConfig{
 		AppName:  "myapp",
-		User:     "verna-myapp",
-		Group:    "verna-myapp",
+		User:     "myapp",
+		Group:    "myapp",
 		RootDir:  "/var/lib/verna",
 		ExecArgs: []string{"--config", "/etc/myapp.toml"},
 	}
@@ -63,8 +63,8 @@ func TestGenerateTemplateUnitWithExecArgs(t *testing.T) {
 func TestGenerateTemplateUnitWithHyphenatedName(t *testing.T) {
 	cfg := UnitConfig{
 		AppName: "my-app",
-		User:    "verna-my-app",
-		Group:   "verna-my-app",
+		User:    "my-app",
+		Group:   "my-app",
 		RootDir: "/var/lib/verna",
 	}
 

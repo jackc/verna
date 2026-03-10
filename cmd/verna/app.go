@@ -13,6 +13,62 @@ import (
 var (
 	validAppName = regexp.MustCompile(`^[a-z]([a-z0-9-]*[a-z0-9])?$`)
 	flagApp      string
+
+	// reservedNames contains system usernames and common service accounts that cannot be used as app names.
+	reservedNames = map[string]struct{}{
+		// Ubuntu built-in system users
+		"root": {}, "daemon": {}, "bin": {}, "sys": {}, "sync": {}, "games": {}, "man": {}, "lp": {},
+		"mail": {}, "news": {}, "uucp": {}, "proxy": {}, "www-data": {}, "backup": {}, "list": {},
+		"irc": {}, "gnats": {}, "nobody": {}, "systemd-network": {}, "systemd-resolve": {},
+		"systemd-timesync": {}, "systemd-oom": {}, "messagebus": {}, "syslog": {}, "uuidd": {},
+		"tcpdump": {}, "tss": {},
+
+		// Ubuntu desktop/server services
+		"avahi": {}, "avahi-autoipd": {}, "usbmux": {}, "dnsmasq": {}, "kernoops": {},
+		"cups-pk-helper": {}, "rtkit": {}, "whoopsie": {}, "sssd": {}, "speech-dispatcher": {},
+		"fwupd-refresh": {}, "nm-openvpn": {}, "saned": {}, "colord": {}, "geoclue": {},
+		"pulse": {}, "gnome-initial-setup": {}, "hplip": {}, "gdm": {}, "pollinate": {},
+		"landscape": {}, "ubuntu": {}, "snap-daemon": {},
+
+		// Core network services
+		"sshd": {}, "ntp": {}, "chrony": {}, "ftp": {}, "telnet": {}, "dhcpd": {},
+		"named": {}, "bind": {}, "postfix": {}, "dovecot": {}, "openvpn": {}, "wireguard": {},
+
+		// Web servers and proxies
+		"nginx": {}, "apache": {}, "caddy": {}, "haproxy": {}, "squid": {}, "varnish": {}, "tomcat": {},
+
+		// Databases
+		"postgres": {}, "mysql": {}, "redis": {}, "mongodb": {}, "elasticsearch": {},
+		"couchdb": {}, "neo4j": {}, "cassandra": {}, "influxdb": {}, "pgbouncer": {},
+
+		// Message queues and caches
+		"rabbitmq": {}, "kafka": {}, "zookeeper": {}, "mosquitto": {}, "memcached": {},
+
+		// Container and infrastructure
+		"docker": {}, "lxd": {}, "consul": {}, "vault": {}, "nomad": {}, "etcd": {}, "minio": {},
+
+		// CI/CD and SCM
+		"git": {}, "jenkins": {}, "gitlab-runner": {},
+
+		// Monitoring
+		"grafana": {}, "prometheus": {}, "nagios": {}, "zabbix": {}, "icinga": {},
+		"collectd": {}, "telegraf": {}, "node-exporter": {}, "statsd": {},
+
+		// Logging
+		"logstash": {}, "kibana": {}, "fluentd": {}, "td-agent": {},
+
+		// Configuration management
+		"puppet": {}, "ansible": {}, "chef": {}, "salt": {},
+
+		// Security
+		"clamav": {}, "fail2ban": {}, "unbound": {}, "knot": {}, "certbot": {}, "letsencrypt": {},
+
+		// Generic sensitive names
+		"admin": {}, "operator": {}, "supervisor": {},
+
+		// Solr
+		"solr": {},
+	}
 )
 
 func newAppCmd() *cobra.Command {
@@ -55,6 +111,9 @@ func newAppInitCmd() *cobra.Command {
 			if !validAppName.MatchString(appName) {
 				return fmt.Errorf("invalid app name %q: must match %s (lowercase letters, digits, hyphens; must start with a letter and not end with a hyphen)", appName, validAppName.String())
 			}
+			if _, reserved := reservedNames[appName]; reserved {
+				return fmt.Errorf("app name %q is a reserved system username and cannot be used", appName)
+			}
 
 			// Validate domains.
 			if len(domains) == 0 {
@@ -84,7 +143,7 @@ func newAppInitCmd() *cobra.Command {
 			greenPort := state.NextPort + 1
 			state.NextPort += 2
 
-			systemUser := "verna-" + appName
+			systemUser := appName
 
 			// Create directory structure.
 			fmt.Printf("Creating directories for %s...\n", appName)
@@ -93,10 +152,20 @@ func newAppInitCmd() *cobra.Command {
 				return fmt.Errorf("creating app directories: %w", err)
 			}
 
-			// Create system user.
-			fmt.Printf("Creating system user %s...\n", systemUser)
-			if _, err := client.Run(fmt.Sprintf("id %s >/dev/null 2>&1 || useradd --system --home %s --shell /usr/sbin/nologin %s", systemUser, appDir, systemUser)); err != nil {
-				return fmt.Errorf("creating system user: %w", err)
+			// Create or verify system user.
+			_, userErr := client.Run(fmt.Sprintf("id %s >/dev/null 2>&1", systemUser))
+			if userErr == nil {
+				// User exists — verify matching group exists.
+				if _, err := client.Run(fmt.Sprintf("getent group %s >/dev/null 2>&1", systemUser)); err != nil {
+					return fmt.Errorf("system user %q exists but has no matching group %q", systemUser, systemUser)
+				}
+				fmt.Printf("Using existing system user %s.\n", systemUser)
+			} else {
+				// User does not exist — create with matching group.
+				fmt.Printf("Creating system user %s...\n", systemUser)
+				if _, err := client.Run(fmt.Sprintf("useradd --system --user-group --home %s --shell /usr/sbin/nologin %s", appDir, systemUser)); err != nil {
+					return fmt.Errorf("creating system user: %w", err)
+				}
 			}
 
 			// Set ownership of shared directory.

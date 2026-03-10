@@ -58,8 +58,8 @@ All app configuration and deployment state lives on the server in a single file,
       "health_check_path": "/health",
       "health_check_timeout": 15,
       "release_retention": 5,
-      "user": "verna-myapp",
-      "group": "verna-myapp",
+      "user": "myapp",
+      "group": "myapp",
       "env": {
         "DATABASE_URL": "postgres://..."
       },
@@ -123,8 +123,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=verna-myapp
-Group=verna-myapp
+User=myapp
+Group=myapp
 WorkingDirectory=/var/lib/verna/apps/myapp/slots/%i
 EnvironmentFile=-/var/lib/verna/apps/myapp/slots/%i/env/runtime.env
 ExecStart=/var/lib/verna/apps/myapp/slots/%i/bin/myapp
@@ -301,7 +301,7 @@ verna/
 
 ### Phase 5: App init (`verna app init`) ✓
 - Create app directory structure (`releases/`, `slots/`, `shared/`)
-- Create app system user/group (`verna-<appname>` to avoid collisions with existing system users)
+- Create app system user/group (uses app name directly; reserved system names are rejected)
 - Generate and install systemd template unit
 - Configure initial Caddy route (via admin API, with server bootstrap)
 - Register app in `verna.json` with allocated ports
