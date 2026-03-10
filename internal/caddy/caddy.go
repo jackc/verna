@@ -12,7 +12,7 @@ type RouteConfig struct {
 	Domains        []string
 	Port           int
 	HasPublic      bool
-	SlotPublicRoot string // e.g. "/var/verna/apps/myapp/slots/blue/public"
+	SlotPublicRoot string // e.g. "/var/lib/verna/apps/myapp/slots/blue/public"
 }
 
 // EnsureVernaCaddyServer checks if the "verna" HTTP server exists in Caddy config

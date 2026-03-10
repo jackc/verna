@@ -63,7 +63,7 @@ Global flags:
 - `--port` — SSH port (default: 22)
 - `--key-file` — path to SSH private key (optional, also tries SSH agent)
 
-All app configuration (domains, env vars, health check settings, ports) lives on the server in `/var/verna/verna.json`. Configuration is set via CLI commands like `verna app init` and `verna app env set`.
+All app configuration (domains, env vars, health check settings, ports) lives on the server in `/var/lib/verna/verna.json`. Configuration is set via CLI commands like `verna app init` and `verna app env set`.
 
 ### Server state (`verna.json`)
 
@@ -129,7 +129,7 @@ Downloads the latest Caddy release from GitHub, installs it to `/usr/local/bin`,
 verna --host myserver server init
 ```
 
-Creates `/var/verna/` and an empty `verna.json` on the server. This is a one-time setup step.
+Creates `/var/lib/verna/` and an empty `verna.json` on the server. This is a one-time setup step.
 
 ### Initialize an app
 
@@ -224,7 +224,7 @@ Removes old release directories beyond the retention count (default 5), preservi
 ## Server layout
 
 ```
-/var/verna/
+/var/lib/verna/
   verna.json                         # server-wide deployment state
   apps/
     myapp/

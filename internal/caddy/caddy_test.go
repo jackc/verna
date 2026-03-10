@@ -88,7 +88,7 @@ func TestBuildRouteWithPublicJSON(t *testing.T) {
 		Domains:        []string{"myapp.example.com"},
 		Port:           18001,
 		HasPublic:      true,
-		SlotPublicRoot: "/var/verna/apps/myapp/slots/blue/public",
+		SlotPublicRoot: "/var/lib/verna/apps/myapp/slots/blue/public",
 	}
 
 	data, err := buildRouteWithPublicJSON(cfg)
@@ -140,7 +140,7 @@ func TestBuildRouteWithPublicJSON(t *testing.T) {
 	if r1FileServer["handler"] != "file_server" {
 		t.Errorf("expected file_server handler, got %v", r1FileServer["handler"])
 	}
-	if r1FileServer["root"] != "/var/verna/apps/myapp/slots/blue/public" {
+	if r1FileServer["root"] != "/var/lib/verna/apps/myapp/slots/blue/public" {
 		t.Errorf("expected correct root, got %v", r1FileServer["root"])
 	}
 

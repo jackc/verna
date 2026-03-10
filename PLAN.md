@@ -21,7 +21,7 @@ Verna is a lightweight deployment tool for compiled web applications (Go, Rust, 
 
 | Concept | Description |
 |---------|-------------|
-| **Server** | A remote host with its own config and state (`/var/verna/verna.json`) |
+| **Server** | A remote host with its own config and state (`/var/lib/verna/verna.json`) |
 | **Application** | A named service with domains, ports, health check config |
 | **Release** | An immutable timestamped artifact directory |
 | **Slot** | Blue or green — each with a fixed port and systemd unit |
@@ -45,7 +45,7 @@ Global flags: `--ssh-host` (required), `--ssh-user` (default: root), `--ssh-port
 
 App flag: `--app` (on the `app` command, inherited by subcommands), also settable via `VERNA_APP`.
 
-### `/var/verna/verna.json` (server config and state)
+### `/var/lib/verna/verna.json` (server config and state)
 
 All app configuration and deployment state lives on the server in a single file, managed atomically. Configuration is set via CLI commands (e.g. `verna app init`, `verna app env set`) and stored here.
 
@@ -90,7 +90,7 @@ Port pairs are auto-assigned from a starting port (18001) during `app init`. The
 ## Server-side directory layout
 
 ```
-/var/verna/
+/var/lib/verna/
   verna.json               # server-wide state
   apps/
     myapp/
@@ -101,8 +101,8 @@ Port pairs are auto-assigned from a starting port (18001) during `app init`. The
         20260306T221500Z-aabbcc/
           ...
       slots/
-        blue -> /var/verna/apps/myapp/releases/20260307T120102Z-1f2e3d4
-        green -> /var/verna/apps/myapp/releases/20260306T221500Z-aabbcc
+        blue -> /var/lib/verna/apps/myapp/releases/20260307T120102Z-1f2e3d4
+        green -> /var/lib/verna/apps/myapp/releases/20260306T221500Z-aabbcc
       shared/              # mutable data (uploads, tmp, etc.)
 ```
 
@@ -125,9 +125,9 @@ After=network.target
 Type=simple
 User=verna-myapp
 Group=verna-myapp
-WorkingDirectory=/var/verna/apps/myapp/slots/%i
-EnvironmentFile=-/var/verna/apps/myapp/slots/%i/env/runtime.env
-ExecStart=/var/verna/apps/myapp/slots/%i/bin/myapp
+WorkingDirectory=/var/lib/verna/apps/myapp/slots/%i
+EnvironmentFile=-/var/lib/verna/apps/myapp/slots/%i/env/runtime.env
+ExecStart=/var/lib/verna/apps/myapp/slots/%i/bin/myapp
 Environment=VERNA_APP=myapp
 Environment=VERNA_SLOT=%i
 Restart=always
@@ -138,7 +138,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/verna/apps/myapp/shared
+ReadWritePaths=/var/lib/verna/apps/myapp/shared
 
 [Install]
 WantedBy=multi-user.target
@@ -224,7 +224,7 @@ Built with **cobra** (`github.com/spf13/cobra`).
 
 | Command | Description |
 |---------|-------------|
-| `verna server init` | Initialize verna on the server (create `/var/verna/`, `verna.json`) |
+| `verna server init` | Initialize verna on the server (create `/var/lib/verna/`, `verna.json`) |
 | `verna app init` | Set up an app on the server (dirs, systemd unit, Caddy route, user) |
 | `verna app set` | Update app settings (domains, health check, retention, exec args) |
 | `verna app env list` | List all environment variables |
@@ -291,11 +291,11 @@ verna/
 
 ### Phase 3: Server-wide state management ✓
 - Define `ServerState` struct with per-app config and state
-- Read/write `/var/verna/verna.json` over SSH
+- Read/write `/var/lib/verna/verna.json` over SSH
 - Atomic writes (write to temp file, rename)
 
 ### Phase 4: Server init (`verna server init`) ✓
-- Create `/var/verna/` directory structure on server
+- Create `/var/lib/verna/` directory structure on server
 - Create empty `verna.json`
 - Verify prerequisites (systemd, Caddy running, curl available)
 
@@ -372,7 +372,7 @@ A minimal Go HTTP server (~20 lines) that satisfies the application contract:
 
 Run against the test server with the test app binary:
 
-1. `verna server init` — verify `/var/verna/` created, `verna.json` exists and is valid
+1. `verna server init` — verify `/var/lib/verna/` created, `verna.json` exists and is valid
 2. `verna app init testapp` — verify directory structure exists on server (`releases/`, `slots/`, `shared/`), verify systemd unit installed at `/etc/systemd/system/testapp@.service`, verify app user created, verify app registered in `verna.json`
 3. `verna deploy testapp` — verify release unpacked to `releases/<timestamp>/`, verify slot symlink updated, verify systemd unit is active, verify health check passes, verify Caddy routes traffic to the correct port, verify `verna.json` shows correct active slot and release
 4. `verna status testapp` — verify output shows active slot, release, service status, health 200

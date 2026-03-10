@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const defaultRootDir = "/var/verna"
+const defaultRootDir = "/var/lib/verna"
 
 type checkResult struct {
 	name    string
