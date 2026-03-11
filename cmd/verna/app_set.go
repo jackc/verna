@@ -109,9 +109,10 @@ func newAppSetCmd() *cobra.Command {
 					activePort = app.Slots[app.ActiveSlot].Port
 				}
 				if err := caddy.UpdateAppRoute(client, caddy.RouteConfig{
-					AppName: appName,
-					Domains: app.Domains,
-					Port:    activePort,
+					AppName:     appName,
+					CaddyServer: app.CaddyServer,
+					Domains:     app.Domains,
+					Port:        activePort,
 				}); err != nil {
 					return fmt.Errorf("updating Caddy route: %w", err)
 				}

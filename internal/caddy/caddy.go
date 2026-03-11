@@ -197,11 +197,16 @@ func ResolveCaddyServer(client *ssh.Client, caddyServerFlag string) (string, err
 }
 
 // AddAppRoute adds a reverse proxy route for the app to the specified Caddy server.
+// It removes any existing route with the same @id first to prevent duplicates
+// (e.g., from a previous failed app init that added the route but didn't complete).
 func AddAppRoute(client *ssh.Client, cfg RouteConfig) error {
 	routeJSON, err := buildRouteJSON(cfg)
 	if err != nil {
 		return fmt.Errorf("building route JSON: %w", err)
 	}
+
+	// Remove any stale route with this ID (ignore errors — may not exist).
+	_ = DeleteAppRoute(client, cfg.AppName)
 
 	httpClient := newHTTPClient(client)
 	url := fmt.Sprintf("%s/config/apps/http/servers/%s/routes", caddyBaseURL, cfg.CaddyServer)
@@ -214,7 +219,8 @@ func AddAppRoute(client *ssh.Client, cfg RouteConfig) error {
 	return checkResponse(resp, fmt.Sprintf("adding Caddy route for %s", cfg.AppName))
 }
 
-// UpdateAppRoute replaces the existing Caddy route for the app atomically via PUT.
+// UpdateAppRoute atomically replaces the existing Caddy route for the app
+// using PATCH on its @id. PATCH strictly replaces an existing value in place.
 func UpdateAppRoute(client *ssh.Client, cfg RouteConfig) error {
 	var routeJSON []byte
 	var err error
@@ -228,7 +234,7 @@ func UpdateAppRoute(client *ssh.Client, cfg RouteConfig) error {
 	}
 
 	id := "verna_" + cfg.AppName
-	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/id/%s", caddyBaseURL, id), bytes.NewReader(routeJSON))
+	req, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("%s/id/%s", caddyBaseURL, id), bytes.NewReader(routeJSON))
 	if err != nil {
 		return fmt.Errorf("updating Caddy route for %s: %w", cfg.AppName, err)
 	}

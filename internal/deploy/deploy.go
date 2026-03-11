@@ -106,6 +106,7 @@ func Deploy(cfg DeployConfig) (*DeployResult, error) {
 	fmt.Printf("  Switching traffic to %s (port %d)...\n", targetSlot, targetPort)
 	routeCfg := caddy.RouteConfig{
 		AppName:        cfg.AppName,
+		CaddyServer:    app.CaddyServer,
 		Domains:        app.Domains,
 		Port:           targetPort,
 		HasPublic:      hasPublic,
