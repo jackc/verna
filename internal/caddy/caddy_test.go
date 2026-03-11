@@ -116,56 +116,35 @@ func TestBuildRouteWithPublicJSON(t *testing.T) {
 	}
 
 	routes := subroute["routes"].([]any)
-	if len(routes) != 3 {
-		t.Fatalf("expected 3 subroutes, got %d", len(routes))
+	if len(routes) != 2 {
+		t.Fatalf("expected 2 subroutes, got %d", len(routes))
 	}
 
-	// Route 1: /assets/* with immutable cache.
+	// Route 1: file_server with pass_thru.
 	r1 := routes[0].(map[string]any)
-	r1Matches := r1["match"].([]any)
-	r1Match := r1Matches[0].(map[string]any)
-	r1Paths := r1Match["path"].([]any)
-	if len(r1Paths) != 1 || r1Paths[0] != "/assets/*" {
-		t.Errorf("expected route 1 to match /assets/*, got %v", r1Paths)
-	}
 	r1Handles := r1["handle"].([]any)
-	if len(r1Handles) != 2 {
-		t.Fatalf("expected 2 handlers in route 1, got %d", len(r1Handles))
+	if len(r1Handles) != 1 {
+		t.Fatalf("expected 1 handler in route 1, got %d", len(r1Handles))
 	}
-	r1Headers := r1Handles[0].(map[string]any)
-	if r1Headers["handler"] != "headers" {
-		t.Errorf("expected headers handler, got %v", r1Headers["handler"])
-	}
-	r1FileServer := r1Handles[1].(map[string]any)
+	r1FileServer := r1Handles[0].(map[string]any)
 	if r1FileServer["handler"] != "file_server" {
 		t.Errorf("expected file_server handler, got %v", r1FileServer["handler"])
 	}
 	if r1FileServer["root"] != "/var/lib/verna/apps/myapp/slots/blue/public" {
 		t.Errorf("expected correct root, got %v", r1FileServer["root"])
 	}
+	if r1FileServer["pass_thru"] != true {
+		t.Errorf("expected pass_thru true, got %v", r1FileServer["pass_thru"])
+	}
 
-	// Route 2: file_server with pass_thru + no-cache.
+	// Route 2: reverse_proxy fallback.
 	r2 := routes[1].(map[string]any)
 	r2Handles := r2["handle"].([]any)
-	if len(r2Handles) != 2 {
-		t.Fatalf("expected 2 handlers in route 2, got %d", len(r2Handles))
+	r2Proxy := r2Handles[0].(map[string]any)
+	if r2Proxy["handler"] != "reverse_proxy" {
+		t.Errorf("expected reverse_proxy handler, got %v", r2Proxy["handler"])
 	}
-	r2FileServer := r2Handles[1].(map[string]any)
-	if r2FileServer["handler"] != "file_server" {
-		t.Errorf("expected file_server handler, got %v", r2FileServer["handler"])
-	}
-	if r2FileServer["pass_thru"] != true {
-		t.Errorf("expected pass_thru true, got %v", r2FileServer["pass_thru"])
-	}
-
-	// Route 3: reverse_proxy fallback.
-	r3 := routes[2].(map[string]any)
-	r3Handles := r3["handle"].([]any)
-	r3Proxy := r3Handles[0].(map[string]any)
-	if r3Proxy["handler"] != "reverse_proxy" {
-		t.Errorf("expected reverse_proxy handler, got %v", r3Proxy["handler"])
-	}
-	upstreams := r3Proxy["upstreams"].([]any)
+	upstreams := r2Proxy["upstreams"].([]any)
 	upstream := upstreams[0].(map[string]any)
 	if upstream["dial"] != "127.0.0.1:18001" {
 		t.Errorf("expected dial 127.0.0.1:18001, got %v", upstream["dial"])

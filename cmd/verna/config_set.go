@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newAppSetCmd() *cobra.Command {
+func newConfigSetCmd() *cobra.Command {
 	var (
 		domains            []string
 		execPath           string
@@ -23,7 +23,7 @@ func newAppSetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set",
 		Short: "Update application settings",
-		Long:  "Updates app configuration in verna.json. Changes to --domain update the Caddy route. Changes to --exec-path or --exec-arg regenerate the systemd unit and restart the active slot.",
+		Long:  "Updates app configuration in verna.json. Changes to --domain or --public-path update the Caddy route. Changes to --exec-path or --exec-arg regenerate the systemd unit and restart the active slot.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appName, err := requireApp()
@@ -77,6 +77,7 @@ func newAppSetCmd() *cobra.Command {
 
 			if flags.Changed("public-path") {
 				app.PublicPath = publicPath
+				needCaddyUpdate = true
 				fmt.Printf("  Public path: %s\n", publicPath)
 			}
 
@@ -101,18 +102,26 @@ func newAppSetCmd() *cobra.Command {
 				fmt.Printf("  Exec args: %v\n", execArgs)
 			}
 
-			// Update Caddy route if domains changed.
+			// Update Caddy route if domains or public-path changed.
 			if needCaddyUpdate {
 				fmt.Println("Updating Caddy route...")
-				activePort := app.Slots["blue"].Port // default to blue
-				if app.ActiveSlot != "" {
-					activePort = app.Slots[app.ActiveSlot].Port
+				activeSlot := app.ActiveSlot
+				if activeSlot == "" {
+					activeSlot = "blue"
+				}
+				activePort := app.Slots[activeSlot].Port
+				hasPublic := app.PublicPath != ""
+				var slotPublicRoot string
+				if hasPublic {
+					slotPublicRoot = fmt.Sprintf("%s/apps/%s/slots/%s/%s", defaultRootDir, appName, activeSlot, app.PublicPath)
 				}
 				if err := caddy.UpdateAppRoute(client, caddy.RouteConfig{
-					AppName:     appName,
-					CaddyServer: app.CaddyServer,
-					Domains:     app.Domains,
-					Port:        activePort,
+					AppName:        appName,
+					CaddyServer:    app.CaddyServer,
+					Domains:        app.Domains,
+					Port:           activePort,
+					HasPublic:      hasPublic,
+					SlotPublicRoot: slotPublicRoot,
 				}); err != nil {
 					return fmt.Errorf("updating Caddy route: %w", err)
 				}

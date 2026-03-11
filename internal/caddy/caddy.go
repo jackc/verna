@@ -297,37 +297,9 @@ func buildRouteWithPublicJSON(cfg RouteConfig) ([]byte, error) {
 			{
 				"handler": "subroute",
 				"routes": []map[string]any{
-					// Route 1: /assets/* with immutable cache headers
-					{
-						"match": []map[string]any{
-							{"path": []string{"/assets/*"}},
-						},
-						"handle": []map[string]any{
-							{
-								"handler": "headers",
-								"response": map[string]any{
-									"set": map[string][]string{
-										"Cache-Control": {"public, max-age=31536000, immutable"},
-									},
-								},
-							},
-							{
-								"handler": "file_server",
-								"root":    cfg.SlotPublicRoot,
-							},
-						},
-					},
-					// Route 2: All paths, file_server with pass_thru + no-cache
+					// Route 1: Try file_server first (pass_thru falls through if file not found)
 					{
 						"handle": []map[string]any{
-							{
-								"handler": "headers",
-								"response": map[string]any{
-									"set": map[string][]string{
-										"Cache-Control": {"no-cache"},
-									},
-								},
-							},
 							{
 								"handler":   "file_server",
 								"root":      cfg.SlotPublicRoot,
@@ -335,7 +307,7 @@ func buildRouteWithPublicJSON(cfg RouteConfig) ([]byte, error) {
 							},
 						},
 					},
-					// Route 3: Fallthrough to reverse_proxy
+					// Route 2: Fallthrough to reverse_proxy
 					{
 						"handle": []map[string]any{
 							{

@@ -29,13 +29,13 @@ All server operations use `golang.org/x/crypto/ssh`. File uploads stream tarball
 Each app has two slots (blue/green) with auto-assigned ports. Slots are symlinks under `/var/lib/verna/apps/<app>/slots/` pointing to immutable release directories under `releases/`. Rollback is a symlink swap + service restart.
 
 ### Artifact tarball
-The deploy command takes a pre-built `.tar.gz` file as its argument. The build system (goreleaser, Makefile, CI script, etc.) is responsible for producing the tarball. Verna uploads it to the server and unpacks it. The executable path and public directory are configured as app-level settings (`--exec-path`, `--public-path` on `app init`/`app set`) and are relative paths within the tarball. After unpacking, Verna validates that the executable exists and is executable on the server.
+The deploy command takes a pre-built `.tar.gz` file as its argument. The build system (goreleaser, Makefile, CI script, etc.) is responsible for producing the tarball. Verna uploads it to the server and unpacks it. The executable path and public directory are configured as app-level settings (`--exec-path`, `--public-path` on `app init`/`app config set`) and are relative paths within the tarball. After unpacking, Verna validates that the executable exists and is executable on the server.
 
 ### Deploy state machine
 The deploy targets the inactive slot: upload tarball, unpack to release dir, update symlink, write env file, restart systemd unit, health check, then atomically switch Caddy's upstream via its admin API (localhost:2019). If anything fails before the Caddy switch, the old slot stays live.
 
 ### CLI
-Built with `github.com/spf13/cobra`. Commands: `server init`, `app init`, `app set`, `app env {list,get,set,unset}`, `deploy`, `status`, `rollback`, `logs`, `prune`.
+Built with `github.com/spf13/cobra`. Commands: `server init`, `app init`, `app config {list,set}`, `app env {list,get,set,unset}`, `deploy`, `status`, `rollback`, `logs`, `prune`.
 
 ## Key Design Constraints
 

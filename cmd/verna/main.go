@@ -48,7 +48,10 @@ func main() {
 
 	appCmd := newAppCmd()
 	appCmd.AddCommand(newAppInitCmd())
-	appCmd.AddCommand(newAppSetCmd())
+	configCmd := newConfigCmd()
+	configCmd.AddCommand(newConfigSetCmd())
+	configCmd.AddCommand(newConfigListCmd())
+	appCmd.AddCommand(configCmd)
 
 	envCmd := newEnvCmd()
 	envCmd.AddCommand(newEnvListCmd())
