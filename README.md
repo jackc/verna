@@ -77,7 +77,7 @@ The server state file tracks all app configuration and deployment state:
     "myapp": {
       "domains": ["myapp.example.com"],
       "exec_path": "bin/myapp",
-      "public_path": "public",
+      "caddy_handle_template": "[{\"handler\":\"subroute\",\"routes\":[{\"handle\":[{\"handler\":\"file_server\",\"root\":\"{{.SlotDir}}/public\",\"pass_thru\":true}]},{\"handle\":[{\"handler\":\"reverse_proxy\",\"upstreams\":[{\"dial\":\"{{.Dial}}\"}]}]}]}]",
       "health_check_path": "/health",
       "health_check_timeout": 15,
       "release_retention": 5,
@@ -142,7 +142,7 @@ Creates the directory structure, system user, systemd template unit, and Caddy r
 
 Options:
 - `--exec-path` (required) — relative path to the executable within the artifact directory (e.g. `bin/myapp`)
-- `--public-path` — relative path to the public assets directory within the artifact directory (e.g. `public`)
+- `--caddy-handle-template` — Go text/template producing the Caddy route handle JSON array (uses `{{.Dial}}` and `{{.SlotDir}}`; prefix with `@` to read from file, e.g. `@caddy-handle.json.tmpl`)
 - `--domain` (required, repeatable) — domain name(s) for the app
 - `--health-check-path` — health check endpoint path (default: `/health`)
 - `--exec-arg` — arguments appended to the executable in ExecStart (repeatable)
@@ -175,7 +175,7 @@ tar czf myapp.tar.gz -C dist .
 verna --host myserver app --app myapp deploy myapp.tar.gz
 ```
 
-The deploy command takes a `.tar.gz` file as its argument. The build system (goreleaser, Makefile, CI script, etc.) is responsible for producing the tarball. Verna uploads it to the server, unpacks it, and validates that the executable exists. The binary path and public directory are configured as app-level settings (see `app init` above).
+The deploy command takes a `.tar.gz` file as its argument. The build system (goreleaser, Makefile, CI script, etc.) is responsible for producing the tarball. Verna uploads it to the server, unpacks it, and validates that the executable exists. The binary path is configured as an app-level setting (see `app init` above). Caddy routing behavior is controlled via `--caddy-handle-template`.
 
 ### Check status
 
@@ -260,7 +260,7 @@ Artifacts are `.tar.gz` files produced by your build system. Verna does not crea
 
 ```
 bin/myapp           # executable (path configured via --exec-path)
-public/             # static assets (optional, path configured via --public-path)
+public/             # static assets (optional, referenced in --caddy-handle-template)
 templates/          # extra files are included as-is
 config.toml         # any other files
 ```

@@ -56,7 +56,7 @@ All app configuration and deployment state lives on the server in a single file,
     "myapp": {
       "domains": ["myapp.example.com"],
       "exec_path": "bin/myapp",
-      "public_path": "public",
+      "caddy_handle_template": "",
       "health_check_path": "/health",
       "health_check_timeout": 15,
       "release_retention": 5,
@@ -87,7 +87,7 @@ Port pairs are auto-assigned from a starting port (18001) during `app init`. The
 
 App-level settings:
 - `exec_path` — relative path to the executable within the artifact directory (e.g. `bin/myapp`)
-- `public_path` — relative path to the public assets directory within the artifact directory (optional)
+- `caddy_handle_template` — Go text/template producing the Caddy route handle JSON array (optional; uses `{{.Dial}}` and `{{.SlotDir}}`)
 
 ---
 
@@ -174,7 +174,7 @@ The deploy command takes a pre-built `.tar.gz` file as its argument. The build s
 
 ```
 bin/myapp                  # executable (path configured via --exec-path)
-public/...                 # static assets (optional, path configured via --public-path)
+public/...                 # static assets (optional, referenced in --caddy-handle-template)
 templates/...              # extra files are included as-is
 config.toml                # any other files
 ```
@@ -222,7 +222,7 @@ Built with **cobra** (`github.com/spf13/cobra`).
 |---------|-------------|
 | `verna server init` | Initialize verna on the server (create `/var/lib/verna/`, `verna.json`) |
 | `verna app init` | Set up an app on the server (dirs, systemd unit, Caddy route, user) |
-| `verna app set` | Update app settings (domains, exec-path, public-path, health check, retention, exec args) |
+| `verna app set` | Update app settings (domains, exec-path, caddy-handle-template, health check, retention, exec args) |
 | `verna app env list` | List all environment variables |
 | `verna app env get <key>` | Get the value of an environment variable |
 | `verna app env set KEY=VAL` | Set env vars, restart active slot |
@@ -305,7 +305,7 @@ verna/
 - Generate and install systemd template unit
 - Configure initial Caddy route (via admin API, with server bootstrap)
 - Register app in `verna.json` with allocated ports
-- Flags: `--domain` (required, repeatable), `--exec-path` (required), `--public-path`, `--health-check-path`, `--health-check-timeout`, `--release-retention`, `--exec-arg`
+- Flags: `--domain` (required, repeatable), `--exec-path` (required), `--caddy-handle-template`, `--health-check-path`, `--health-check-timeout`, `--release-retention`, `--exec-arg`
 
 ### Phase 5.5: Environment variable management (`verna app env`) ✓
 - `app env list <app>` — list all env vars (sorted `KEY=value`)
@@ -325,13 +325,13 @@ verna/
 ### Phase 7: Deploy command ✓
 - `internal/deploy/deploy.go` — 13-step deploy state machine: upload, unpack, validate executable, chown, symlink, env, systemd restart, health check, Caddy switch, stop old slot, update state, prune
 - `internal/health/health.go` — `WaitForHealthy()` polls health endpoint over SSH with 500ms interval
-- `internal/caddy/caddy.go` — `UpdateAppRoute()` replaces route via PUT `/id/verna_<app>`; `buildRouteWithPublicJSON()` creates subroute with `/assets/*` immutable cache, `file_server` with `pass_thru` + `no-cache`, and `reverse_proxy` fallback
+- `internal/caddy/caddy.go` — `UpdateAppRoute()` replaces route via PATCH `/id/verna_<app>`; route handle block is rendered from a Go text/template with `{{.Dial}}` and `{{.SlotDir}}` variables
 - Fail-safe: if health check fails, failed slot is stopped, old slot stays live, state unchanged
 - Auto-prunes old releases beyond retention after successful deploy
 - `selectReleasesToPrune()` extracted as testable pure function
 
 ### Phase 7.5: App management commands ✓
-- `app set` — update domains, exec-path, public-path, health check, retention, exec args; regenerates systemd unit and restarts if needed
+- `app set` — update domains, exec-path, caddy-handle-template, health check, retention, exec args; regenerates systemd unit and restarts if needed
 - `app delete` — stop services, remove systemd unit, Caddy route, app directory, state entry (with confirmation prompt)
 
 ### Phase 8: Supporting commands
@@ -410,7 +410,8 @@ Run against the test server with the test app:
 - **Auto-assigned port pairs** — ports allocated from a starting range during `app init`, tracked in `verna.json`
 - **No local config file** — connection info via CLI flags; all app config lives server-side in `verna.json`
 - **Pre-built tarballs** — deploy takes a `.tar.gz` produced by the build system; Verna only uploads, unpacks, and validates
-- **Exec path as app config** — `--exec-path` and `--public-path` are app-level settings stored in `verna.json`, not deploy-time flags
+- **Exec path as app config** — `--exec-path` is an app-level setting stored in `verna.json`, not a deploy-time flag
+- **Caddy handle template** — `--caddy-handle-template` is a Go text/template producing the Caddy route handle JSON array, with `{{.Dial}}` and `{{.SlotDir}}` variables for the active slot's upstream and directory
 - **Caddy admin API** — atomic upstream switching without config file management
 - **Tarballs, not rsync** — atomic uploads, easy retention
 - **Immutable releases** — rollback is just a symlink swap + restart

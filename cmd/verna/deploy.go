@@ -69,7 +69,7 @@ func newDeployCmd() *cobra.Command {
 				State:         state,
 				TarballReader: f,
 				ReleaseID:     releaseID,
-				PublicPath:    app.PublicPath,
+				CaddyHandleTemplate: app.CaddyHandleTemplate,
 			})
 			if err != nil {
 				return fmt.Errorf("deploy failed: %w", err)

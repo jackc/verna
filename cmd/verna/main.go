@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -80,6 +81,19 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// resolveFileArg checks if val starts with "@" and, if so, reads the file at
+// the remaining path and returns its contents. Otherwise returns val as-is.
+func resolveFileArg(val string) (string, error) {
+	if !strings.HasPrefix(val, "@") {
+		return val, nil
+	}
+	data, err := os.ReadFile(val[1:])
+	if err != nil {
+		return "", fmt.Errorf("reading file %s: %w", val[1:], err)
+	}
+	return strings.TrimRight(string(data), "\n"), nil
 }
 
 func applyEnvDefaults(cmd *cobra.Command) {

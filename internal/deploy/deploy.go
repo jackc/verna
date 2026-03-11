@@ -20,7 +20,7 @@ type DeployConfig struct {
 	State         *server.ServerState
 	TarballReader io.Reader
 	ReleaseID     string
-	PublicPath    string // relative path to public dir within artifact (for Caddy route)
+	CaddyHandleTemplate string // Go text/template for the Caddy route handle array
 }
 
 type DeployResult struct {
@@ -102,15 +102,14 @@ func Deploy(cfg DeployConfig) (*DeployResult, error) {
 	fmt.Println("  Health check passed")
 
 	// Step 10: Update Caddy route.
-	hasPublic := cfg.PublicPath != ""
 	fmt.Printf("  Switching traffic to %s (port %d)...\n", targetSlot, targetPort)
 	routeCfg := caddy.RouteConfig{
-		AppName:        cfg.AppName,
-		CaddyServer:    app.CaddyServer,
-		Domains:        app.Domains,
-		Port:           targetPort,
-		HasPublic:      hasPublic,
-		SlotPublicRoot: fmt.Sprintf("%s/slots/%s/%s", appDir, targetSlot, cfg.PublicPath),
+		AppName:             cfg.AppName,
+		CaddyServer:         app.CaddyServer,
+		Domains:             app.Domains,
+		Port:                targetPort,
+		CaddyHandleTemplate: cfg.CaddyHandleTemplate,
+		SlotDir:             fmt.Sprintf("%s/slots/%s", appDir, targetSlot),
 	}
 	if err := caddy.UpdateAppRoute(cfg.Client, routeCfg); err != nil {
 		return nil, fmt.Errorf("updating Caddy route: %w", err)

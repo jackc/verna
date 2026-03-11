@@ -5,11 +5,12 @@ import (
 	"testing"
 )
 
-func TestBuildRouteJSON(t *testing.T) {
+func TestBuildRouteJSON_DefaultTemplate(t *testing.T) {
 	cfg := RouteConfig{
 		AppName: "myapp",
 		Domains: []string{"myapp.example.com"},
 		Port:    18001,
+		SlotDir: "/var/lib/verna/apps/myapp/slots/blue",
 	}
 
 	data, err := buildRouteJSON(cfg)
@@ -22,12 +23,10 @@ func TestBuildRouteJSON(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 
-	// Check @id.
 	if route["@id"] != "verna_myapp" {
 		t.Errorf("expected @id %q, got %q", "verna_myapp", route["@id"])
 	}
 
-	// Check match hosts.
 	matches := route["match"].([]any)
 	if len(matches) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(matches))
@@ -38,7 +37,6 @@ func TestBuildRouteJSON(t *testing.T) {
 		t.Errorf("expected host [myapp.example.com], got %v", hosts)
 	}
 
-	// Check handle upstream.
 	handles := route["handle"].([]any)
 	if len(handles) != 1 {
 		t.Fatalf("expected 1 handler, got %d", len(handles))
@@ -57,11 +55,12 @@ func TestBuildRouteJSON(t *testing.T) {
 	}
 }
 
-func TestBuildRouteJSONMultipleDomains(t *testing.T) {
+func TestBuildRouteJSON_MultipleDomains(t *testing.T) {
 	cfg := RouteConfig{
 		AppName: "myapp",
 		Domains: []string{"myapp.example.com", "www.myapp.example.com"},
 		Port:    18001,
+		SlotDir: "/var/lib/verna/apps/myapp/slots/blue",
 	}
 
 	data, err := buildRouteJSON(cfg)
@@ -82,16 +81,16 @@ func TestBuildRouteJSONMultipleDomains(t *testing.T) {
 	}
 }
 
-func TestBuildRouteWithPublicJSON(t *testing.T) {
+func TestBuildRouteJSON_CustomTemplate(t *testing.T) {
 	cfg := RouteConfig{
-		AppName:        "myapp",
-		Domains:        []string{"myapp.example.com"},
-		Port:           18001,
-		HasPublic:      true,
-		SlotPublicRoot: "/var/lib/verna/apps/myapp/slots/blue/public",
+		AppName: "myapp",
+		Domains: []string{"myapp.example.com"},
+		Port:    18001,
+		SlotDir: "/var/lib/verna/apps/myapp/slots/blue",
+		CaddyHandleTemplate: `[{"handler":"subroute","routes":[{"handle":[{"handler":"file_server","root":"{{.SlotDir}}/public","pass_thru":true}]},{"handle":[{"handler":"reverse_proxy","upstreams":[{"dial":"{{.Dial}}"}]}]}]}]`,
 	}
 
-	data, err := buildRouteWithPublicJSON(cfg)
+	data, err := buildRouteJSON(cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -105,7 +104,6 @@ func TestBuildRouteWithPublicJSON(t *testing.T) {
 		t.Errorf("expected @id verna_myapp, got %v", route["@id"])
 	}
 
-	// Top-level handle should be a subroute.
 	handles := route["handle"].([]any)
 	if len(handles) != 1 {
 		t.Fatalf("expected 1 top-level handler, got %d", len(handles))
@@ -123,9 +121,6 @@ func TestBuildRouteWithPublicJSON(t *testing.T) {
 	// Route 1: file_server with pass_thru.
 	r1 := routes[0].(map[string]any)
 	r1Handles := r1["handle"].([]any)
-	if len(r1Handles) != 1 {
-		t.Fatalf("expected 1 handler in route 1, got %d", len(r1Handles))
-	}
 	r1FileServer := r1Handles[0].(map[string]any)
 	if r1FileServer["handler"] != "file_server" {
 		t.Errorf("expected file_server handler, got %v", r1FileServer["handler"])
@@ -148,5 +143,33 @@ func TestBuildRouteWithPublicJSON(t *testing.T) {
 	upstream := upstreams[0].(map[string]any)
 	if upstream["dial"] != "127.0.0.1:18001" {
 		t.Errorf("expected dial 127.0.0.1:18001, got %v", upstream["dial"])
+	}
+}
+
+func TestValidateHandleTemplate_Valid(t *testing.T) {
+	err := ValidateHandleTemplate(`[{"handler": "reverse_proxy", "upstreams": [{"dial": "{{.Dial}}"}]}]`)
+	if err != nil {
+		t.Errorf("expected valid template, got error: %v", err)
+	}
+}
+
+func TestValidateHandleTemplate_InvalidSyntax(t *testing.T) {
+	err := ValidateHandleTemplate(`[{"handler": "reverse_proxy", "upstreams": [{"dial": "{{.Dial}"}]}]`)
+	if err == nil {
+		t.Error("expected error for invalid template syntax")
+	}
+}
+
+func TestValidateHandleTemplate_InvalidJSON(t *testing.T) {
+	err := ValidateHandleTemplate(`not json {{.Dial}}`)
+	if err == nil {
+		t.Error("expected error for template producing invalid JSON")
+	}
+}
+
+func TestValidateHandleTemplate_NotArray(t *testing.T) {
+	err := ValidateHandleTemplate(`{"handler": "reverse_proxy"}`)
+	if err == nil {
+		t.Error("expected error for template producing JSON object instead of array")
 	}
 }

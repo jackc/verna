@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/jackc/verna/internal/ssh"
@@ -20,13 +21,21 @@ const caddyAdminAddr = "127.0.0.1:2019"
 const caddyBaseURL = "http://localhost:2019"
 
 type RouteConfig struct {
-	AppName        string
-	CaddyServer    string
-	Domains        []string
-	Port           int
-	HasPublic      bool
-	SlotPublicRoot string // e.g. "/var/lib/verna/apps/myapp/slots/blue/public"
+	AppName             string
+	CaddyServer         string
+	Domains             []string
+	Port                int
+	CaddyHandleTemplate string // Go text/template producing the JSON "handle" array; empty = default reverse_proxy
+	SlotDir             string // e.g. "/var/lib/verna/apps/myapp/slots/blue"
 }
+
+// HandleTemplateData is the data passed to the caddy handle template.
+type HandleTemplateData struct {
+	Dial    string // e.g. "127.0.0.1:18001"
+	SlotDir string // e.g. "/var/lib/verna/apps/myapp/slots/blue"
+}
+
+const defaultHandleTemplate = `[{"handler": "reverse_proxy", "upstreams": [{"dial": "{{.Dial}}"}]}]`
 
 func newHTTPClient(sshClient *ssh.Client) *http.Client {
 	return &http.Client{
@@ -222,13 +231,7 @@ func AddAppRoute(client *ssh.Client, cfg RouteConfig) error {
 // UpdateAppRoute atomically replaces the existing Caddy route for the app
 // using PATCH on its @id. PATCH strictly replaces an existing value in place.
 func UpdateAppRoute(client *ssh.Client, cfg RouteConfig) error {
-	var routeJSON []byte
-	var err error
-	if cfg.HasPublic {
-		routeJSON, err = buildRouteWithPublicJSON(cfg)
-	} else {
-		routeJSON, err = buildRouteJSON(cfg)
-	}
+	routeJSON, err := buildRouteJSON(cfg)
 	if err != nil {
 		return fmt.Errorf("building route JSON: %w", err)
 	}
@@ -269,64 +272,57 @@ func DeleteAppRoute(client *ssh.Client, appName string) error {
 }
 
 func buildRouteJSON(cfg RouteConfig) ([]byte, error) {
+	handleJSON, err := renderHandleTemplate(cfg.CaddyHandleTemplate, HandleTemplateData{
+		Dial:    fmt.Sprintf("127.0.0.1:%d", cfg.Port),
+		SlotDir: cfg.SlotDir,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("rendering handle template: %w", err)
+	}
+
 	route := map[string]any{
 		"@id": "verna_" + cfg.AppName,
 		"match": []map[string]any{
 			{"host": cfg.Domains},
 		},
-		"handle": []map[string]any{
-			{
-				"handler": "reverse_proxy",
-				"upstreams": []map[string]string{
-					{"dial": fmt.Sprintf("127.0.0.1:%d", cfg.Port)},
-				},
-			},
-		},
+		"handle": json.RawMessage(handleJSON),
 	}
 
 	return json.Marshal(route)
 }
 
-func buildRouteWithPublicJSON(cfg RouteConfig) ([]byte, error) {
-	route := map[string]any{
-		"@id": "verna_" + cfg.AppName,
-		"match": []map[string]any{
-			{"host": cfg.Domains},
-		},
-		"handle": []map[string]any{
-			{
-				"handler": "subroute",
-				"routes": []map[string]any{
-					// Route 1: Try file_server first (pass_thru falls through if file not found)
-					{
-						"handle": []map[string]any{
-							{
-								"handler":   "file_server",
-								"root":      cfg.SlotPublicRoot,
-								"pass_thru": true,
-								"precompressed": map[string]any{
-									"gzip": map[string]any{},
-									"zstd": map[string]any{},
-									"br":   map[string]any{},
-								},
-							},
-						},
-					},
-					// Route 2: Fallthrough to reverse_proxy
-					{
-						"handle": []map[string]any{
-							{
-								"handler": "reverse_proxy",
-								"upstreams": []map[string]string{
-									{"dial": fmt.Sprintf("127.0.0.1:%d", cfg.Port)},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
+// renderHandleTemplate executes the handle template with the given data and
+// validates that the result is a JSON array.
+func renderHandleTemplate(tmpl string, data HandleTemplateData) ([]byte, error) {
+	if tmpl == "" {
+		tmpl = defaultHandleTemplate
 	}
 
-	return json.Marshal(route)
+	t, err := template.New("handle").Parse(tmpl)
+	if err != nil {
+		return nil, fmt.Errorf("parsing template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, data); err != nil {
+		return nil, fmt.Errorf("executing template: %w", err)
+	}
+
+	// Validate the rendered output is a JSON array.
+	var arr []json.RawMessage
+	if err := json.Unmarshal(buf.Bytes(), &arr); err != nil {
+		return nil, fmt.Errorf("template output is not a valid JSON array: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+// ValidateHandleTemplate checks that the given template string is a valid Go
+// text/template that produces a JSON array when rendered with sample data.
+func ValidateHandleTemplate(tmpl string) error {
+	_, err := renderHandleTemplate(tmpl, HandleTemplateData{
+		Dial:    "127.0.0.1:9999",
+		SlotDir: "/tmp/test",
+	})
+	return err
 }

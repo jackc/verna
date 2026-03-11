@@ -44,7 +44,7 @@ func newConfigListCmd() *cobra.Command {
 
 			printSetting("domains", strings.Join(app.Domains, ", "))
 			printSetting("exec-path", app.ExecPath)
-			printSetting("public-path", app.PublicPath)
+			printSetting("caddy-handle-template", app.CaddyHandleTemplate)
 			printSetting("health-check-path", app.HealthCheckPath)
 			printSetting("health-check-timeout", fmt.Sprintf("%d", app.HealthCheckTimeout))
 			printSetting("release-retention", fmt.Sprintf("%d", app.ReleaseRetention))

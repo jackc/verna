@@ -94,7 +94,7 @@ func newAppInitCmd() *cobra.Command {
 	var (
 		domains            []string
 		execPath           string
-		publicPath         string
+		caddyHandleTemplate string
 		healthCheckPath    string
 		healthCheckTimeout int
 		releaseRetention   int
@@ -203,6 +203,17 @@ func newAppInitCmd() *cobra.Command {
 				return fmt.Errorf("reloading systemd: %w", err)
 			}
 
+			// Resolve and validate caddy handle template if provided.
+			if caddyHandleTemplate != "" {
+				caddyHandleTemplate, err = resolveFileArg(caddyHandleTemplate)
+				if err != nil {
+					return err
+				}
+				if err := caddy.ValidateHandleTemplate(caddyHandleTemplate); err != nil {
+					return fmt.Errorf("invalid caddy handle template: %w", err)
+				}
+			}
+
 			// Configure Caddy route.
 			fmt.Println("Configuring Caddy route...")
 			serverName, err := caddy.ResolveCaddyServer(client, caddyServer)
@@ -213,10 +224,11 @@ func newAppInitCmd() *cobra.Command {
 				return fmt.Errorf("ensuring Caddy routes: %w", err)
 			}
 			if err := caddy.AddAppRoute(client, caddy.RouteConfig{
-				AppName:     appName,
-				CaddyServer: serverName,
-				Domains:     domains,
-				Port:        bluePort,
+				AppName:             appName,
+				CaddyServer:         serverName,
+				Domains:             domains,
+				Port:                bluePort,
+				CaddyHandleTemplate: caddyHandleTemplate,
 			}); err != nil {
 				return fmt.Errorf("adding Caddy route: %w", err)
 			}
@@ -225,7 +237,7 @@ func newAppInitCmd() *cobra.Command {
 			state.Apps[appName] = &server.AppState{
 				Domains:            domains,
 				ExecPath:           execPath,
-				PublicPath:         publicPath,
+				CaddyHandleTemplate: caddyHandleTemplate,
 				HealthCheckPath:    healthCheckPath,
 				HealthCheckTimeout: healthCheckTimeout,
 				ReleaseRetention:   releaseRetention,
@@ -257,7 +269,7 @@ func newAppInitCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&domains, "domain", nil, "domain name for the app (repeatable, at least one required)")
 	cmd.Flags().StringVar(&execPath, "exec-path", "", "relative path to executable in artifact directory (e.g. bin/myapp)")
 	cmd.MarkFlagRequired("exec-path")
-	cmd.Flags().StringVar(&publicPath, "public-path", "", "relative path to public assets directory in artifact directory")
+	cmd.Flags().StringVar(&caddyHandleTemplate, "caddy-handle-template", "", "Go text/template producing the Caddy route handle JSON array (uses {{.Dial}} and {{.SlotDir}}; prefix with @ to read from file)")
 	cmd.Flags().StringVar(&healthCheckPath, "health-check-path", "/health", "health check endpoint path")
 	cmd.Flags().IntVar(&healthCheckTimeout, "health-check-timeout", 15, "health check timeout in seconds")
 	cmd.Flags().IntVar(&releaseRetention, "release-retention", 5, "number of releases to retain")
