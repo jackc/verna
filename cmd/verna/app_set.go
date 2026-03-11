@@ -12,6 +12,8 @@ import (
 func newAppSetCmd() *cobra.Command {
 	var (
 		domains            []string
+		execPath           string
+		publicPath         string
 		healthCheckPath    string
 		healthCheckTimeout int
 		releaseRetention   int
@@ -21,7 +23,7 @@ func newAppSetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set",
 		Short: "Update application settings",
-		Long:  "Updates app configuration in verna.json. Changes to --domain update the Caddy route. Changes to --exec-arg regenerate the systemd unit and restart the active slot.",
+		Long:  "Updates app configuration in verna.json. Changes to --domain update the Caddy route. Changes to --exec-path or --exec-arg regenerate the systemd unit and restart the active slot.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appName, err := requireApp()
@@ -31,10 +33,11 @@ func newAppSetCmd() *cobra.Command {
 
 			// Check that at least one flag was provided.
 			flags := cmd.Flags()
-			if !flags.Changed("domain") && !flags.Changed("health-check-path") &&
+			if !flags.Changed("domain") && !flags.Changed("exec-path") && !flags.Changed("public-path") &&
+				!flags.Changed("health-check-path") &&
 				!flags.Changed("health-check-timeout") && !flags.Changed("release-retention") &&
 				!flags.Changed("exec-arg") {
-				return fmt.Errorf("no settings to update (use --domain, --health-check-path, --health-check-timeout, --release-retention, or --exec-arg)")
+				return fmt.Errorf("no settings to update (use --domain, --exec-path, --public-path, --health-check-path, --health-check-timeout, --release-retention, or --exec-arg)")
 			}
 
 			client, err := connectToServer()
@@ -64,6 +67,17 @@ func newAppSetCmd() *cobra.Command {
 				app.Domains = domains
 				needCaddyUpdate = true
 				fmt.Printf("  Domains: %v\n", domains)
+			}
+
+			if flags.Changed("exec-path") {
+				app.ExecPath = execPath
+				needSystemdUpdate = true
+				fmt.Printf("  Exec path: %s\n", execPath)
+			}
+
+			if flags.Changed("public-path") {
+				app.PublicPath = publicPath
+				fmt.Printf("  Public path: %s\n", publicPath)
 			}
 
 			if flags.Changed("health-check-path") {
@@ -103,7 +117,7 @@ func newAppSetCmd() *cobra.Command {
 				}
 			}
 
-			// Regenerate systemd unit if exec args changed.
+			// Regenerate systemd unit if exec path or exec args changed.
 			if needSystemdUpdate {
 				fmt.Println("Regenerating systemd unit...")
 				unitContent, err := systemd.GenerateTemplateUnit(systemd.UnitConfig{
@@ -111,6 +125,7 @@ func newAppSetCmd() *cobra.Command {
 					User:     app.User,
 					Group:    app.Group,
 					RootDir:  defaultRootDir,
+					ExecPath: app.ExecPath,
 					ExecArgs: app.ExecArgs,
 				})
 				if err != nil {
@@ -148,10 +163,12 @@ func newAppSetCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringArrayVar(&domains, "domain", nil, "domain name for the app (repeatable, replaces all existing domains)")
+	cmd.Flags().StringVar(&execPath, "exec-path", "", "relative path to executable in artifact directory")
+	cmd.Flags().StringVar(&publicPath, "public-path", "", "relative path to public assets directory in artifact directory")
 	cmd.Flags().StringVar(&healthCheckPath, "health-check-path", "", "health check endpoint path")
 	cmd.Flags().IntVar(&healthCheckTimeout, "health-check-timeout", 0, "health check timeout in seconds")
 	cmd.Flags().IntVar(&releaseRetention, "release-retention", 0, "number of releases to retain")
-	cmd.Flags().StringArrayVar(&execArgs, "exec-arg", nil, "argument to append to the binary in ExecStart (repeatable, replaces all existing args)")
+	cmd.Flags().StringArrayVar(&execArgs, "exec-arg", nil, "argument to append to the executable in ExecStart (repeatable, replaces all existing args)")
 
 	return cmd
 }

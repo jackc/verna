@@ -14,12 +14,13 @@ import (
 )
 
 type DeployConfig struct {
-	Client   *ssh.Client
-	RootDir  string
-	AppName  string
-	State    *server.ServerState
-	Artifact *bytes.Buffer
-	Manifest *Manifest
+	Client    *ssh.Client
+	RootDir   string
+	AppName   string
+	State     *server.ServerState
+	Artifact  *bytes.Buffer
+	Manifest  *Manifest
+	PublicPath string // relative path to public dir within artifact (for Caddy route)
 }
 
 type DeployResult struct {
@@ -100,7 +101,7 @@ func Deploy(cfg DeployConfig) (*DeployResult, error) {
 		Domains:        app.Domains,
 		Port:           targetPort,
 		HasPublic:      cfg.Manifest.HasPublic,
-		SlotPublicRoot: fmt.Sprintf("%s/slots/%s/public", appDir, targetSlot),
+		SlotPublicRoot: fmt.Sprintf("%s/slots/%s/%s", appDir, targetSlot, cfg.PublicPath),
 	}
 	if err := caddy.UpdateAppRoute(cfg.Client, routeCfg); err != nil {
 		return nil, fmt.Errorf("updating Caddy route: %w", err)

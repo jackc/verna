@@ -22,7 +22,7 @@ Verna is a lightweight deployment tool for compiled web applications (Go, Rust, 
 | Concept | Description |
 |---------|-------------|
 | **Server** | A remote host with its own config and state (`/var/lib/verna/verna.json`) |
-| **Application** | A named service with domains, ports, health check config |
+| **Application** | A named service with domains, ports, exec path, health check config |
 | **Release** | An immutable timestamped artifact directory |
 | **Slot** | Blue or green — each with a fixed port and systemd unit |
 | **Active slot** | The one currently receiving traffic via Caddy |
@@ -37,8 +37,8 @@ There is no local configuration file. Server connection is specified via CLI fla
 
 ```sh
 verna --ssh-host prod-1 server init
-verna --ssh-host prod-1 app --app myapp init --domain myapp.example.com
-verna --ssh-host prod-1 app --app myapp deploy --binary bin/myapp
+verna --ssh-host prod-1 app --app myapp init --domain myapp.example.com --exec-path bin/myapp
+verna --ssh-host prod-1 app --app myapp deploy dist/
 ```
 
 Global flags: `--ssh-host` (required), `--ssh-user` (default: root), `--ssh-port` (default: 22), `--ssh-key-file` (optional, also tries SSH agent). All support `VERNA_` env var equivalents (e.g. `VERNA_SSH_HOST`).
@@ -55,6 +55,8 @@ All app configuration and deployment state lives on the server in a single file,
   "apps": {
     "myapp": {
       "domains": ["myapp.example.com"],
+      "exec_path": "bin/myapp",
+      "public_path": "public",
       "health_check_path": "/health",
       "health_check_timeout": 15,
       "release_retention": 5,
@@ -85,6 +87,10 @@ All app configuration and deployment state lives on the server in a single file,
 
 Port pairs are auto-assigned from a starting port (18001) during `app init`. The `next_port` field in the root tracks the next available port.
 
+App-level settings:
+- `exec_path` — relative path to the executable within the artifact directory (e.g. `bin/myapp`)
+- `public_path` — relative path to the public assets directory within the artifact directory (optional)
+
 ---
 
 ## Server-side directory layout
@@ -96,8 +102,10 @@ Port pairs are auto-assigned from a starting port (18001) during `app init`. The
     myapp/
       releases/
         20260307T120102Z-1f2e3d4/
+          manifest.json
           bin/myapp
           public/...
+          templates/...    # extra files deployed alongside
         20260306T221500Z-aabbcc/
           ...
       slots/
@@ -109,6 +117,7 @@ Port pairs are auto-assigned from a starting port (18001) during `app init`. The
 - **Releases are immutable** — makes rollback trivial
 - **Slots are symlinks** to release directories
 - **Shared directory** for mutable data that persists across deploys
+- **Working directory** is the release root (the slot symlink target)
 
 ---
 
@@ -148,6 +157,7 @@ WantedBy=multi-user.target
 - Instance names: `myapp@blue.service`, `myapp@green.service`
 - Logs naturally separated via journald: `journalctl -u myapp@blue`
 - PORT is set via `runtime.env` (per-slot `EnvironmentFile`)
+- `ExecStart` path is derived from the app's `exec_path` setting
 
 ---
 
@@ -163,13 +173,14 @@ Use **Caddy admin API** (`localhost:2019`) for atomic upstream switching — no 
 
 ## Artifact format
 
-**Tarball with manifest** (not raw rsync):
+The deploy command takes a local **artifact directory** as its argument. The entire directory is tar.gz'd and uploaded. Verna prepends a `manifest.json` to the tarball.
 
 ```
-myapp_20260307T120102Z_1f2e3d4.tar.gz
-  manifest.json
-  bin/myapp
-  public/...
+manifest.json              # added by verna
+bin/myapp                  # executable (path configured via --exec-path)
+public/...                 # static assets (optional, path configured via --public-path)
+templates/...              # extra files are included as-is
+config.toml                # any other files in the directory
 ```
 
 `manifest.json`:
@@ -184,7 +195,7 @@ myapp_20260307T120102Z_1f2e3d4.tar.gz
 }
 ```
 
-Benefits: atomic upload, verification, retention, future signing/checksums.
+Benefits: atomic upload, verification, retention, extra files alongside the executable, future signing/checksums.
 
 ---
 
@@ -226,12 +237,13 @@ Built with **cobra** (`github.com/spf13/cobra`).
 |---------|-------------|
 | `verna server init` | Initialize verna on the server (create `/var/lib/verna/`, `verna.json`) |
 | `verna app init` | Set up an app on the server (dirs, systemd unit, Caddy route, user) |
-| `verna app set` | Update app settings (domains, health check, retention, exec args) |
+| `verna app set` | Update app settings (domains, exec-path, public-path, health check, retention, exec args) |
 | `verna app env list` | List all environment variables |
 | `verna app env get <key>` | Get the value of an environment variable |
 | `verna app env set KEY=VAL` | Set env vars, restart active slot |
 | `verna app env unset KEY` | Remove env vars, restart active slot |
-| `verna app deploy` | Package artifact, upload, activate on inactive slot |
+| `verna app deploy <dir>` | Tar.gz artifact directory, upload, activate on inactive slot |
+| `verna app delete` | Stop services, remove systemd unit, Caddy route, app directory, state entry |
 | `verna status <app>` | Show active slot, current release, health |
 | `verna rollback <app>` | Switch traffic back to the previous slot |
 | `verna logs <app>` | Tail journald logs (`--slot`, `-f`, `-n`) |
@@ -250,9 +262,11 @@ verna/
   cmd/
     verna/
       main.go              # cobra root command setup
-      server.go            # verna server init
-      app.go               # verna app init
-      deploy.go            # verna deploy
+      server.go            # verna server init, server install-caddy
+      app.go               # verna app init, app delete
+      app_set.go           # verna app set
+      env.go               # verna app env {list,get,set,unset}
+      deploy.go            # verna app deploy
       status.go            # verna status
       rollback.go          # verna rollback
       logs.go              # verna logs
@@ -262,13 +276,14 @@ verna/
       ssh.go               # SSH client using golang.org/x/crypto/ssh
     deploy/
       deploy.go            # Deploy state machine orchestration
-      artifact.go          # Tarball creation and upload
+      artifact.go          # Tarball creation from artifact directory
     caddy/
       caddy.go             # Caddy admin API interactions (via SSH tunnel)
     systemd/
       systemd.go           # systemd unit generation and management
     server/
       state.go             # Server-wide verna.json state management
+      env.go               # Runtime env file generation
     health/
       health.go            # Health check logic
   go.mod
@@ -305,7 +320,7 @@ verna/
 - Generate and install systemd template unit
 - Configure initial Caddy route (via admin API, with server bootstrap)
 - Register app in `verna.json` with allocated ports
-- Flags: `--domain` (required, repeatable), `--health-check-path`, `--health-check-timeout`, `--release-retention`, `--exec-arg`
+- Flags: `--domain` (required, repeatable), `--exec-path` (required), `--public-path`, `--health-check-path`, `--health-check-timeout`, `--release-retention`, `--exec-arg`
 
 ### Phase 5.5: Environment variable management (`verna app env`) ✓
 - `app env list <app>` — list all env vars (sorted `KEY=value`)
@@ -316,10 +331,10 @@ verna/
 - PORT is reserved and always managed by verna
 
 ### Phase 6: Artifact packaging ✓
-- `internal/deploy/artifact.go` — `BuildArtifact()` creates `.tar.gz` in memory with `manifest.json`, `bin/<app>`, optional `public/` dir
+- `internal/deploy/artifact.go` — `BuildArtifact()` tar.gz's an entire artifact directory, prepends `manifest.json`, ensures the executable (at `exec_path`) has 0755 permissions
 - `Manifest` struct includes `has_public` field for Phase 7 Caddy static asset routing
 - `GenerateReleaseID()` produces `YYYYMMDDTHHMMSSZ-<commit7>` format
-- `cmd/verna/deploy.go` — command skeleton with `--binary`, `--public`, `--commit`, `--os`, `--arch` flags
+- `cmd/verna/deploy.go` — takes artifact directory as positional argument, reads `exec_path` and `public_path` from app state
 - Auto-detects git commit if `--commit` not provided
 - Caddy static asset strategy designed: `/assets/*` gets immutable cache, other static files get `no-cache` with `pass_thru` to reverse proxy
 
@@ -330,6 +345,10 @@ verna/
 - Fail-safe: if health check fails, failed slot is stopped, old slot stays live, state unchanged
 - Auto-prunes old releases beyond retention after successful deploy
 - `selectReleasesToPrune()` extracted as testable pure function
+
+### Phase 7.5: App management commands ✓
+- `app set` — update domains, exec-path, public-path, health check, retention, exec args; regenerates systemd unit and restarts if needed
+- `app delete` — stop services, remove systemd unit, Caddy route, app directory, state entry (with confirmation prompt)
 
 ### Phase 8: Supporting commands
 - `status` — read verna.json, check systemd unit status, health check
@@ -346,8 +365,8 @@ verna/
 Pure logic that can be tested in isolation:
 
 - **Server state serialization** — round-trip `Marshal`/`Parse`, verify empty state, verify per-app state updates don't clobber other apps, verify defaults (health check path `/health`, retention 5)
-- **Artifact creation** — create a tarball from a temp binary + extra files, read it back, verify `manifest.json` contents (app name, release format, commit truncation to 7 chars), verify binary is at `bin/<name>` inside the archive, verify file permissions are preserved
-- **Systemd unit generation** — render a unit for a known config, verify `User=`, `Group=`, `ExecStart=`, `WorkingDirectory=`, `ReadWritePaths=` contain correct paths; verify `EnvironmentFile=-` uses the `-` prefix (optional file); verify env vars from config appear in the output
+- **Artifact creation** — create a tarball from an artifact directory, read it back, verify `manifest.json` contents (app name, release format, commit truncation to 7 chars), verify executable is at the configured `exec_path` and has 0755 permissions, verify extra files are included
+- **Systemd unit generation** — render a unit for a known config, verify `User=`, `Group=`, `ExecStart=` (uses configured `exec_path`), `WorkingDirectory=`, `ReadWritePaths=` contain correct paths; verify `EnvironmentFile=-` uses the `-` prefix (optional file)
 - **Slot env generation** — verify `PORT=<port>` appears, verify additional env vars from config are included
 - **Release naming** — verify timestamp format `YYYYMMDDTHHMMSSZ`, verify commit suffix is appended and truncated, verify no suffix when commit is empty
 
@@ -370,23 +389,23 @@ A minimal Go HTTP server (~20 lines) that satisfies the application contract:
 
 #### End-to-end test sequence
 
-Run against the test server with the test app binary:
+Run against the test server with the test app:
 
 1. `verna server init` — verify `/var/lib/verna/` created, `verna.json` exists and is valid
-2. `verna app init testapp` — verify directory structure exists on server (`releases/`, `slots/`, `shared/`), verify systemd unit installed at `/etc/systemd/system/testapp@.service`, verify app user created, verify app registered in `verna.json`
-3. `verna deploy testapp` — verify release unpacked to `releases/<timestamp>/`, verify slot symlink updated, verify systemd unit is active, verify health check passes, verify Caddy routes traffic to the correct port, verify `verna.json` shows correct active slot and release
+2. `verna app init testapp --exec-path bin/testapp --domain test.example.com` — verify directory structure, systemd unit, app user, state
+3. `verna app deploy dist/` — verify release unpacked, slot symlink updated, systemd active, health check passes, Caddy routes traffic, state updated
 4. `verna status testapp` — verify output shows active slot, release, service status, health 200
-5. `verna deploy testapp` (second deploy) — verify it targets the *other* slot, verify Caddy switches upstream, verify old slot is stopped, verify `verna.json` updated
-6. `verna rollback testapp` — verify traffic returns to previous slot, verify the rolled-back-to slot's health check passes before switching, verify `verna.json` updated
+5. `verna app deploy dist/` (second deploy) — verify it targets the *other* slot, verify Caddy switches, old slot stopped, state updated
+6. `verna rollback testapp` — verify traffic returns to previous slot, health check passes, state updated
 7. `verna logs testapp` — verify journald output streams for the active slot
-8. `verna prune testapp` — deploy several times to exceed retention, verify old releases are removed but active releases are preserved
+8. `verna prune testapp` — deploy several times to exceed retention, verify old releases removed but active releases preserved
 
 #### Failure scenarios
 
-- **Health check failure** — deploy an app that doesn't serve `/health`; verify the deploy aborts, the new slot is stopped, the old slot remains live and unchanged, `verna.json` is not updated
+- **Health check failure** — deploy an app that doesn't serve `/health`; verify the deploy aborts, the new slot is stopped, the old slot remains live and unchanged, state is not updated
 - **Bad artifact** — deploy with a corrupt or missing tarball; verify the deploy fails before any slot switch
-- **Missing app config** — run `verna deploy nonexistent`; verify a clear error message
-- **First deploy** (no prior state) — verify `verna.json` is updated, first slot is picked, Caddy is configured
+- **Missing app config** — run `verna app deploy nonexistent`; verify a clear error message
+- **First deploy** (no prior state) — verify state is updated, first slot is picked, Caddy is configured
 - **Server not initialized** — run `verna app init` before `verna server init`; verify a clear error message
 
 ### What not to unit test
@@ -406,6 +425,8 @@ Run against the test server with the test app binary:
 - **Separate `server init` and `app init`** — server setup is a one-time operation; app setup can be repeated
 - **Auto-assigned port pairs** — ports allocated from a starting range during `app init`, tracked in `verna.json`
 - **No local config file** — connection info via CLI flags; all app config lives server-side in `verna.json`
+- **Artifact directory** — deploy takes a local directory, tar.gz's it entirely; supports extra files (templates, config, data) alongside the executable
+- **Exec path as app config** — `--exec-path` and `--public-path` are app-level settings stored in `verna.json`, not deploy-time flags
 - **Caddy admin API** — atomic upstream switching without config file management
 - **Tarballs, not rsync** — atomic uploads, verifiable, easier retention
 - **Immutable releases** — rollback is just a symlink swap + restart

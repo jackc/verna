@@ -7,10 +7,11 @@ import (
 
 func TestGenerateTemplateUnit(t *testing.T) {
 	cfg := UnitConfig{
-		AppName: "myapp",
-		User:    "myapp",
-		Group:   "myapp",
-		RootDir: "/var/lib/verna",
+		AppName:    "myapp",
+		User:       "myapp",
+		Group:      "myapp",
+		RootDir:    "/var/lib/verna",
+		ExecPath: "bin/myapp",
 	}
 
 	unit, err := GenerateTemplateUnit(cfg)
@@ -42,11 +43,12 @@ func TestGenerateTemplateUnit(t *testing.T) {
 
 func TestGenerateTemplateUnitWithExecArgs(t *testing.T) {
 	cfg := UnitConfig{
-		AppName:  "myapp",
-		User:     "myapp",
-		Group:    "myapp",
-		RootDir:  "/var/lib/verna",
-		ExecArgs: []string{"--config", "/etc/myapp.toml"},
+		AppName:    "myapp",
+		User:       "myapp",
+		Group:      "myapp",
+		RootDir:    "/var/lib/verna",
+		ExecPath: "bin/myapp",
+		ExecArgs:   []string{"--config", "/etc/myapp.toml"},
 	}
 
 	unit, err := GenerateTemplateUnit(cfg)
@@ -62,10 +64,11 @@ func TestGenerateTemplateUnitWithExecArgs(t *testing.T) {
 
 func TestGenerateTemplateUnitWithHyphenatedName(t *testing.T) {
 	cfg := UnitConfig{
-		AppName: "my-app",
-		User:    "my-app",
-		Group:   "my-app",
-		RootDir: "/var/lib/verna",
+		AppName:    "my-app",
+		User:       "my-app",
+		Group:      "my-app",
+		RootDir:    "/var/lib/verna",
+		ExecPath: "bin/my-app",
 	}
 
 	unit, err := GenerateTemplateUnit(cfg)
@@ -78,5 +81,25 @@ func TestGenerateTemplateUnitWithHyphenatedName(t *testing.T) {
 	}
 	if !strings.Contains(unit, "ExecStart=/var/lib/verna/apps/my-app/slots/%i/bin/my-app") {
 		t.Error("expected exec start to contain hyphenated app name")
+	}
+}
+
+func TestGenerateTemplateUnitCustomExecPath(t *testing.T) {
+	cfg := UnitConfig{
+		AppName:    "myapp",
+		User:       "myapp",
+		Group:      "myapp",
+		RootDir:    "/var/lib/verna",
+		ExecPath: "server/myapp",
+	}
+
+	unit, err := GenerateTemplateUnit(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := "ExecStart=/var/lib/verna/apps/myapp/slots/%i/server/myapp"
+	if !strings.Contains(unit, expected) {
+		t.Errorf("expected unit to contain %q, got:\n%s", expected, unit)
 	}
 }

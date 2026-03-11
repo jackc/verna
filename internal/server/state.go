@@ -17,6 +17,8 @@ type ServerState struct {
 
 type AppState struct {
 	Domains            []string            `json:"domains"`
+	ExecPath           string              `json:"exec_path"`
+	PublicPath         string              `json:"public_path,omitempty"`
 	HealthCheckPath    string              `json:"health_check_path"`
 	HealthCheckTimeout int                 `json:"health_check_timeout"`
 	ReleaseRetention   int                 `json:"release_retention"`

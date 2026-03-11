@@ -75,6 +75,8 @@ The server state file tracks all app configuration and deployment state:
   "apps": {
     "myapp": {
       "domains": ["myapp.example.com"],
+      "exec_path": "bin/myapp",
+      "public_path": "public",
       "health_check_path": "/health",
       "health_check_timeout": 15,
       "release_retention": 5,
@@ -134,10 +136,17 @@ Creates `/var/lib/verna/` and an empty `verna.json` on the server. This is a one
 ### Initialize an app
 
 ```sh
-verna --host myserver app init myapp --domain myapp.example.com
+verna --host myserver app --app myapp init --domain myapp.example.com --exec-path bin/myapp
 ```
 
 Creates the directory structure, system user, systemd template unit, and Caddy route on the server. Registers the app in `verna.json` with auto-assigned ports.
+
+Options:
+- `--exec-path` (required) — relative path to the executable within the artifact directory (e.g. `bin/myapp`)
+- `--public-path` — relative path to the public assets directory within the artifact directory (e.g. `public`)
+- `--domain` (required, repeatable) — domain name(s) for the app
+- `--health-check-path` — health check endpoint path (default: `/health`)
+- `--exec-arg` — arguments appended to the executable in ExecStart (repeatable)
 
 ### Manage environment variables
 
@@ -160,16 +169,13 @@ Environment variables are stored in `verna.json` and written to each slot's `env
 ### Deploy
 
 ```sh
-# Build your binary, then deploy it
-GOOS=linux GOARCH=amd64 go build -o bin/myapp .
-verna --host myserver deploy myapp --binary bin/myapp --commit $(git rev-parse --short HEAD)
+# Build your binary into an artifact directory, then deploy it
+mkdir -p dist/bin
+GOOS=linux GOARCH=amd64 go build -o dist/bin/myapp .
+verna --host myserver app --app myapp deploy dist/
 ```
 
-Or with a pre-built artifact:
-
-```sh
-verna --host myserver deploy myapp --artifact myapp_release.tar.gz
-```
+The deploy command takes a directory as its argument. The entire directory is tar.gz'd and deployed. The binary path and public directory are configured as app-level settings (see `app init` above). Extra files in the artifact directory (templates, config, data) are deployed alongside the binary.
 
 ### Check status
 
@@ -253,12 +259,14 @@ Releases are immutable. Slots are symlinks. Rollback is a symlink swap.
 
 ## Artifact format
 
-Artifacts are `.tar.gz` files containing:
+Artifacts are `.tar.gz` files created from the artifact directory you pass to `deploy`. The entire directory is included, plus a `manifest.json` prepended by verna:
 
 ```
-manifest.json       # release metadata
-bin/myapp           # compiled binary
-public/             # static assets (optional)
+manifest.json       # release metadata (added by verna)
+bin/myapp           # executable (path configured via --exec-path)
+public/             # static assets (optional, path configured via --public-path)
+templates/          # extra files are included as-is
+config.toml         # any other files in the directory
 ```
 
 The `manifest.json` records the app name, release ID, git commit, build time, OS, and architecture:
@@ -278,8 +286,10 @@ The `manifest.json` records the app name, release ID, git commit, build time, OS
 
 ```sh
 # In your CI pipeline:
-GOOS=linux GOARCH=amd64 go build -o bin/myapp .
-verna --host myserver deploy myapp --binary bin/myapp --commit $CI_COMMIT_SHA
+mkdir -p dist/bin
+GOOS=linux GOARCH=amd64 go build -o dist/bin/myapp .
+cp -r templates dist/templates  # include extra files as needed
+verna --host myserver app --app myapp deploy dist/
 ```
 
 ## Design decisions

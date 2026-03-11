@@ -23,13 +23,14 @@ type Manifest struct {
 }
 
 type ArtifactOptions struct {
-	AppName    string
-	BinaryPath string
-	PublicDir  string
-	Commit     string
-	BuildTime  time.Time
-	OS         string
-	Arch       string
+	AppName       string
+	ArtifactDir   string // local directory to tar
+	ExecRelPath   string // relative path to executable within ArtifactDir (for validation + chmod 0755)
+	PublicRelPath string // relative path to public dir within ArtifactDir (optional, for manifest HasPublic)
+	Commit        string
+	BuildTime     time.Time
+	OS            string
+	Arch          string
 }
 
 // GenerateReleaseID produces a release identifier from a timestamp and optional commit hash.
@@ -51,26 +52,38 @@ func TruncateCommit(commit string, n int) string {
 	return commit[:n]
 }
 
-// BuildArtifact creates a .tar.gz artifact in memory and returns the buffer and manifest.
+// BuildArtifact creates a .tar.gz artifact in memory by tarring the entire ArtifactDir.
+// It prepends a manifest.json and ensures the executable has 0755 permissions.
 func BuildArtifact(opts ArtifactOptions) (*bytes.Buffer, *Manifest, error) {
-	// Validate binary.
-	binInfo, err := os.Stat(opts.BinaryPath)
+	// Validate artifact directory.
+	dirInfo, err := os.Stat(opts.ArtifactDir)
 	if err != nil {
-		return nil, nil, fmt.Errorf("binary %s: %w", opts.BinaryPath, err)
+		return nil, nil, fmt.Errorf("artifact directory %s: %w", opts.ArtifactDir, err)
 	}
-	if binInfo.IsDir() {
-		return nil, nil, fmt.Errorf("binary %s is a directory, not a file", opts.BinaryPath)
+	if !dirInfo.IsDir() {
+		return nil, nil, fmt.Errorf("artifact path %s is not a directory", opts.ArtifactDir)
+	}
+
+	// Validate executable exists within artifact dir.
+	execAbs := filepath.Join(opts.ArtifactDir, opts.ExecRelPath)
+	execInfo, err := os.Stat(execAbs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("executable %s: %w", execAbs, err)
+	}
+	if execInfo.IsDir() {
+		return nil, nil, fmt.Errorf("executable %s is a directory, not a file", execAbs)
 	}
 
 	// Validate public dir if specified.
-	hasPublic := opts.PublicDir != ""
+	hasPublic := opts.PublicRelPath != ""
 	if hasPublic {
-		pubInfo, err := os.Stat(opts.PublicDir)
+		publicAbs := filepath.Join(opts.ArtifactDir, opts.PublicRelPath)
+		pubInfo, err := os.Stat(publicAbs)
 		if err != nil {
-			return nil, nil, fmt.Errorf("public directory %s: %w", opts.PublicDir, err)
+			return nil, nil, fmt.Errorf("public directory %s: %w", publicAbs, err)
 		}
 		if !pubInfo.IsDir() {
-			return nil, nil, fmt.Errorf("public path %s is not a directory", opts.PublicDir)
+			return nil, nil, fmt.Errorf("public path %s is not a directory", publicAbs)
 		}
 	}
 
@@ -95,7 +108,7 @@ func BuildArtifact(opts ArtifactOptions) (*bytes.Buffer, *Manifest, error) {
 	gw := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gw)
 
-	// Add manifest.json.
+	// Add manifest.json first.
 	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshaling manifest: %w", err)
@@ -112,41 +125,11 @@ func BuildArtifact(opts ArtifactOptions) (*bytes.Buffer, *Manifest, error) {
 		return nil, nil, fmt.Errorf("writing manifest: %w", err)
 	}
 
-	// Add binary.
-	binData, err := os.ReadFile(opts.BinaryPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("reading binary: %w", err)
-	}
-	if err := tw.WriteHeader(&tar.Header{
-		Name: "bin/" + opts.AppName,
-		Size: int64(len(binData)),
-		Mode: 0755,
-	}); err != nil {
-		return nil, nil, fmt.Errorf("writing binary header: %w", err)
-	}
-	if _, err := tw.Write(binData); err != nil {
-		return nil, nil, fmt.Errorf("writing binary: %w", err)
-	}
+	// Normalize executable relative path for comparison.
+	execRel := filepath.ToSlash(opts.ExecRelPath)
 
-	// Add public directory contents.
-	if hasPublic {
-		if err := addPublicDir(tw, opts.PublicDir); err != nil {
-			return nil, nil, err
-		}
-	}
-
-	if err := tw.Close(); err != nil {
-		return nil, nil, fmt.Errorf("closing tar writer: %w", err)
-	}
-	if err := gw.Close(); err != nil {
-		return nil, nil, fmt.Errorf("closing gzip writer: %w", err)
-	}
-
-	return &buf, manifest, nil
-}
-
-func addPublicDir(tw *tar.Writer, publicDir string) error {
-	return filepath.WalkDir(publicDir, func(path string, d fs.DirEntry, err error) error {
+	// Walk entire artifact directory.
+	if err := filepath.WalkDir(opts.ArtifactDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -160,11 +143,14 @@ func addPublicDir(tw *tar.Writer, publicDir string) error {
 			return nil
 		}
 
-		rel, err := filepath.Rel(publicDir, path)
+		rel, err := filepath.Rel(opts.ArtifactDir, path)
 		if err != nil {
 			return err
 		}
-		archivePath := "public/" + filepath.ToSlash(rel)
+		if rel == "." {
+			return nil
+		}
+		archivePath := filepath.ToSlash(rel)
 
 		if d.IsDir() {
 			return tw.WriteHeader(&tar.Header{
@@ -178,10 +164,16 @@ func addPublicDir(tw *tar.Writer, publicDir string) error {
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
+
+		mode := int64(info.Mode().Perm())
+		if archivePath == execRel {
+			mode = 0755
+		}
+
 		if err := tw.WriteHeader(&tar.Header{
 			Name: archivePath,
 			Size: int64(len(data)),
-			Mode: int64(info.Mode().Perm()),
+			Mode: mode,
 		}); err != nil {
 			return fmt.Errorf("writing header for %s: %w", archivePath, err)
 		}
@@ -189,5 +181,16 @@ func addPublicDir(tw *tar.Writer, publicDir string) error {
 			return fmt.Errorf("writing %s: %w", archivePath, err)
 		}
 		return nil
-	})
+	}); err != nil {
+		return nil, nil, fmt.Errorf("walking artifact directory: %w", err)
+	}
+
+	if err := tw.Close(); err != nil {
+		return nil, nil, fmt.Errorf("closing tar writer: %w", err)
+	}
+	if err := gw.Close(); err != nil {
+		return nil, nil, fmt.Errorf("closing gzip writer: %w", err)
+	}
+
+	return &buf, manifest, nil
 }

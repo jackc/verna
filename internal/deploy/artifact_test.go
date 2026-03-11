@@ -56,21 +56,25 @@ func TestTruncateCommit(t *testing.T) {
 	}
 }
 
-func TestBuildArtifact_BinaryOnly(t *testing.T) {
+func TestBuildArtifact_ExecOnly(t *testing.T) {
 	dir := t.TempDir()
-	binPath := filepath.Join(dir, "myapp")
-	if err := os.WriteFile(binPath, []byte("binary-content"), 0755); err != nil {
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "myapp"), []byte("executable-content"), 0755); err != nil {
 		t.Fatal(err)
 	}
 
 	ts := time.Date(2026, 3, 7, 12, 1, 2, 0, time.UTC)
 	buf, manifest, err := BuildArtifact(ArtifactOptions{
-		AppName:    "myapp",
-		BinaryPath: binPath,
-		Commit:     "abc1234",
-		BuildTime:  ts,
-		OS:         "linux",
-		Arch:       "amd64",
+		AppName:       "myapp",
+		ArtifactDir:   dir,
+		ExecRelPath: "bin/myapp",
+		Commit:        "abc1234",
+		BuildTime:     ts,
+		OS:            "linux",
+		Arch:          "amd64",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -108,16 +112,16 @@ func TestBuildArtifact_BinaryOnly(t *testing.T) {
 		t.Error("manifest has_public should be false")
 	}
 
-	// Verify binary.
-	binEntry, ok := entries["bin/myapp"]
+	// Verify executable.
+	execEntry, ok := entries["bin/myapp"]
 	if !ok {
 		t.Fatal("bin/myapp not found in tarball")
 	}
-	if string(binEntry.data) != "binary-content" {
-		t.Errorf("expected binary-content, got %s", string(binEntry.data))
+	if string(execEntry.data) != "executable-content" {
+		t.Errorf("expected executable-content, got %s", string(execEntry.data))
 	}
-	if binEntry.mode != 0755 {
-		t.Errorf("expected mode 0755, got %o", binEntry.mode)
+	if execEntry.mode != 0755 {
+		t.Errorf("expected mode 0755, got %o", execEntry.mode)
 	}
 
 	// Verify no public entries.
@@ -130,11 +134,17 @@ func TestBuildArtifact_BinaryOnly(t *testing.T) {
 
 func TestBuildArtifact_WithPublicDir(t *testing.T) {
 	dir := t.TempDir()
-	binPath := filepath.Join(dir, "myapp")
-	if err := os.WriteFile(binPath, []byte("bin"), 0755); err != nil {
+
+	// Create bin/myapp
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "myapp"), []byte("bin"), 0755); err != nil {
 		t.Fatal(err)
 	}
 
+	// Create public/ with files
 	pubDir := filepath.Join(dir, "public")
 	assetsDir := filepath.Join(pubDir, "assets")
 	if err := os.MkdirAll(assetsDir, 0755); err != nil {
@@ -149,13 +159,14 @@ func TestBuildArtifact_WithPublicDir(t *testing.T) {
 
 	ts := time.Date(2026, 3, 7, 12, 1, 2, 0, time.UTC)
 	buf, manifest, err := BuildArtifact(ArtifactOptions{
-		AppName:    "myapp",
-		BinaryPath: binPath,
-		PublicDir:  pubDir,
-		Commit:     "abc1234",
-		BuildTime:  ts,
-		OS:         "linux",
-		Arch:       "amd64",
+		AppName:       "myapp",
+		ArtifactDir:   dir,
+		ExecRelPath: "bin/myapp",
+		PublicRelPath:  "public",
+		Commit:        "abc1234",
+		BuildTime:     ts,
+		OS:            "linux",
+		Arch:          "amd64",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -191,47 +202,137 @@ func TestBuildArtifact_WithPublicDir(t *testing.T) {
 	}
 }
 
-func TestBuildArtifact_MissingBinary(t *testing.T) {
-	_, _, err := BuildArtifact(ArtifactOptions{
-		AppName:    "myapp",
-		BinaryPath: "/nonexistent/binary",
-		OS:         "linux",
-		Arch:       "amd64",
+func TestBuildArtifact_ExtraFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create bin/myapp
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "myapp"), []byte("bin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create extra files (templates, config)
+	tmplDir := filepath.Join(dir, "templates")
+	if err := os.MkdirAll(tmplDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmplDir, "email.html"), []byte("<email>"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("key = \"val\""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ts := time.Date(2026, 3, 7, 12, 1, 2, 0, time.UTC)
+	buf, _, err := BuildArtifact(ArtifactOptions{
+		AppName:       "myapp",
+		ArtifactDir:   dir,
+		ExecRelPath: "bin/myapp",
+		Commit:        "abc1234",
+		BuildTime:     ts,
+		OS:            "linux",
+		Arch:          "amd64",
 	})
-	if err == nil {
-		t.Fatal("expected error for missing binary")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	entries := extractTarGz(t, buf)
+
+	// Verify extra files are included.
+	tmplEntry, ok := entries["templates/email.html"]
+	if !ok {
+		t.Fatal("templates/email.html not found in tarball")
+	}
+	if string(tmplEntry.data) != "<email>" {
+		t.Errorf("expected <email>, got %s", string(tmplEntry.data))
+	}
+
+	cfgEntry, ok := entries["config.toml"]
+	if !ok {
+		t.Fatal("config.toml not found in tarball")
+	}
+	if string(cfgEntry.data) != "key = \"val\"" {
+		t.Errorf("expected key = \"val\", got %s", string(cfgEntry.data))
+	}
+
+	// Verify executable and manifest still present.
+	if _, ok := entries["manifest.json"]; !ok {
+		t.Error("manifest.json not found")
+	}
+	if _, ok := entries["bin/myapp"]; !ok {
+		t.Error("bin/myapp not found")
 	}
 }
 
-func TestBuildArtifact_BinaryIsDirectory(t *testing.T) {
+func TestBuildArtifact_MissingExec(t *testing.T) {
 	dir := t.TempDir()
 	_, _, err := BuildArtifact(ArtifactOptions{
-		AppName:    "myapp",
-		BinaryPath: dir,
-		OS:         "linux",
-		Arch:       "amd64",
+		AppName:       "myapp",
+		ArtifactDir:   dir,
+		ExecRelPath: "bin/myapp",
+		OS:            "linux",
+		Arch:          "amd64",
 	})
 	if err == nil {
-		t.Fatal("expected error when binary is a directory")
+		t.Fatal("expected error for missing executable")
+	}
+}
+
+func TestBuildArtifact_ExecIsDirectory(t *testing.T) {
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin", "myapp")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := BuildArtifact(ArtifactOptions{
+		AppName:       "myapp",
+		ArtifactDir:   dir,
+		ExecRelPath: "bin/myapp",
+		OS:            "linux",
+		Arch:          "amd64",
+	})
+	if err == nil {
+		t.Fatal("expected error when executable is a directory")
 	}
 }
 
 func TestBuildArtifact_PublicDirNotExist(t *testing.T) {
 	dir := t.TempDir()
-	binPath := filepath.Join(dir, "myapp")
-	if err := os.WriteFile(binPath, []byte("bin"), 0755); err != nil {
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "myapp"), []byte("bin"), 0755); err != nil {
 		t.Fatal(err)
 	}
 
 	_, _, err := BuildArtifact(ArtifactOptions{
-		AppName:    "myapp",
-		BinaryPath: binPath,
-		PublicDir:  "/nonexistent/public",
-		OS:         "linux",
-		Arch:       "amd64",
+		AppName:       "myapp",
+		ArtifactDir:   dir,
+		ExecRelPath: "bin/myapp",
+		PublicRelPath:  "public",
+		OS:            "linux",
+		Arch:          "amd64",
 	})
 	if err == nil {
 		t.Fatal("expected error for missing public dir")
+	}
+}
+
+func TestBuildArtifact_MissingArtifactDir(t *testing.T) {
+	_, _, err := BuildArtifact(ArtifactOptions{
+		AppName:       "myapp",
+		ArtifactDir:   "/nonexistent/dir",
+		ExecRelPath: "bin/myapp",
+		OS:            "linux",
+		Arch:          "amd64",
+	})
+	if err == nil {
+		t.Fatal("expected error for missing artifact directory")
 	}
 }
 

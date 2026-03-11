@@ -12,18 +12,18 @@ import (
 
 func newDeployCmd() *cobra.Command {
 	var (
-		binaryPath string
-		publicDir  string
 		commit     string
 		targetOS   string
 		targetArch string
 	)
 
 	cmd := &cobra.Command{
-		Use:   "deploy",
+		Use:   "deploy <artifact-dir>",
 		Short: "Deploy an application to the server",
-		Args:  cobra.NoArgs,
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			artifactDir := args[0]
+
 			appName, err := requireApp()
 			if err != nil {
 				return err
@@ -34,15 +34,32 @@ func newDeployCmd() *cobra.Command {
 				commit = detectGitCommit()
 			}
 
+			// Connect to server and read app config first (need exec/public paths).
+			client, err := connectToServer()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+
+			state, err := server.ReadState(client, defaultRootDir)
+			if err != nil {
+				return fmt.Errorf("reading server state: %w", err)
+			}
+			app, exists := state.Apps[appName]
+			if !exists {
+				return fmt.Errorf("app %q not found (run `verna app init` first)", appName)
+			}
+
 			// Build artifact.
 			fmt.Println("Building artifact...")
 			buf, manifest, err := deploy.BuildArtifact(deploy.ArtifactOptions{
-				AppName:    appName,
-				BinaryPath: binaryPath,
-				PublicDir:  publicDir,
-				Commit:     commit,
-				OS:         targetOS,
-				Arch:       targetArch,
+				AppName:       appName,
+				ArtifactDir:   artifactDir,
+				ExecRelPath:   app.ExecPath,
+				PublicRelPath: app.PublicPath,
+				Commit:       commit,
+				OS:           targetOS,
+				Arch:         targetArch,
 			})
 			if err != nil {
 				return fmt.Errorf("building artifact: %w", err)
@@ -50,30 +67,15 @@ func newDeployCmd() *cobra.Command {
 
 			fmt.Printf("Artifact built: %s (%d bytes)\n", manifest.Release, buf.Len())
 
-			// Connect to server.
-			client, err := connectToServer()
-			if err != nil {
-				return err
-			}
-			defer client.Close()
-
-			// Read state and validate app exists.
-			state, err := server.ReadState(client, defaultRootDir)
-			if err != nil {
-				return fmt.Errorf("reading server state: %w", err)
-			}
-			if _, exists := state.Apps[appName]; !exists {
-				return fmt.Errorf("app %q not found (run `verna app init %s` first)", appName, appName)
-			}
-
 			fmt.Printf("Deploying %s (release %s)...\n", appName, manifest.Release)
 			result, err := deploy.Deploy(deploy.DeployConfig{
-				Client:   client,
-				RootDir:  defaultRootDir,
-				AppName:  appName,
-				State:    state,
-				Artifact: buf,
-				Manifest: manifest,
+				Client:    client,
+				RootDir:   defaultRootDir,
+				AppName:   appName,
+				State:     state,
+				Artifact:  buf,
+				Manifest:  manifest,
+				PublicPath: app.PublicPath,
 			})
 			if err != nil {
 				return fmt.Errorf("deploy failed: %w", err)
@@ -90,9 +92,6 @@ func newDeployCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&binaryPath, "binary", "", "path to compiled binary (required)")
-	cmd.MarkFlagRequired("binary")
-	cmd.Flags().StringVar(&publicDir, "public", "", "path to public assets directory")
 	cmd.Flags().StringVar(&commit, "commit", "", "git commit hash (auto-detected if omitted)")
 	cmd.Flags().StringVar(&targetOS, "os", "linux", "target operating system")
 	cmd.Flags().StringVar(&targetArch, "arch", "amd64", "target architecture")

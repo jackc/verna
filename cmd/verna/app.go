@@ -93,6 +93,8 @@ func requireApp() (string, error) {
 func newAppInitCmd() *cobra.Command {
 	var (
 		domains            []string
+		execPath           string
+		publicPath         string
 		healthCheckPath    string
 		healthCheckTimeout int
 		releaseRetention   int
@@ -179,11 +181,12 @@ func newAppInitCmd() *cobra.Command {
 			// Generate and install systemd template unit.
 			fmt.Println("Installing systemd unit...")
 			unitContent, err := systemd.GenerateTemplateUnit(systemd.UnitConfig{
-				AppName:  appName,
-				User:     systemUser,
-				Group:    systemUser,
-				RootDir:  defaultRootDir,
-				ExecArgs: execArgs,
+				AppName:    appName,
+				User:       systemUser,
+				Group:      systemUser,
+				RootDir:    defaultRootDir,
+				ExecPath: execPath,
+				ExecArgs:   execArgs,
 			})
 			if err != nil {
 				return fmt.Errorf("generating systemd unit: %w", err)
@@ -216,6 +219,8 @@ func newAppInitCmd() *cobra.Command {
 			// Register app in state.
 			state.Apps[appName] = &server.AppState{
 				Domains:            domains,
+				ExecPath:           execPath,
+				PublicPath:         publicPath,
 				HealthCheckPath:    healthCheckPath,
 				HealthCheckTimeout: healthCheckTimeout,
 				ReleaseRetention:   releaseRetention,
@@ -244,10 +249,13 @@ func newAppInitCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringArrayVar(&domains, "domain", nil, "domain name for the app (repeatable, at least one required)")
+	cmd.Flags().StringVar(&execPath, "exec-path", "", "relative path to executable in artifact directory (e.g. bin/myapp)")
+	cmd.MarkFlagRequired("exec-path")
+	cmd.Flags().StringVar(&publicPath, "public-path", "", "relative path to public assets directory in artifact directory")
 	cmd.Flags().StringVar(&healthCheckPath, "health-check-path", "/health", "health check endpoint path")
 	cmd.Flags().IntVar(&healthCheckTimeout, "health-check-timeout", 15, "health check timeout in seconds")
 	cmd.Flags().IntVar(&releaseRetention, "release-retention", 5, "number of releases to retain")
-	cmd.Flags().StringArrayVar(&execArgs, "exec-arg", nil, "argument to append to the binary in ExecStart (repeatable)")
+	cmd.Flags().StringArrayVar(&execArgs, "exec-arg", nil, "argument to append to the executable in ExecStart (repeatable)")
 
 	return cmd
 }

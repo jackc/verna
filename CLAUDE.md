@@ -28,6 +28,9 @@ All server operations use `golang.org/x/crypto/ssh`. File uploads stream tarball
 ### Blue/green slots
 Each app has two slots (blue/green) with auto-assigned ports. Slots are symlinks under `/var/lib/verna/apps/<app>/slots/` pointing to immutable release directories under `releases/`. Rollback is a symlink swap + service restart.
 
+### Artifact directory
+The deploy command takes a local directory as its argument. This directory is tar.gz'd and deployed as-is. The executable path and public directory are configured as app-level settings (`--exec-path`, `--public-path` on `app init`/`app set`) and are relative paths within the artifact directory. Extra files (templates, config, data) in the artifact directory are deployed alongside the executable.
+
 ### Deploy state machine
 The deploy targets the inactive slot: upload tarball, unpack to release dir, update symlink, write env file, restart systemd unit, health check, then atomically switch Caddy's upstream via its admin API (localhost:2019). If anything fails before the Caddy switch, the old slot stays live.
 

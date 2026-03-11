@@ -7,11 +7,12 @@ import (
 )
 
 type UnitConfig struct {
-	AppName  string
-	User     string
-	Group    string
-	RootDir  string
-	ExecArgs []string
+	AppName    string
+	User       string
+	Group      string
+	RootDir    string
+	ExecPath   string // relative path to executable within artifact dir (e.g. "bin/myapp")
+	ExecArgs   []string
 }
 
 func (c UnitConfig) ExecArgsSuffix() string {
@@ -31,7 +32,7 @@ User={{.User}}
 Group={{.Group}}
 WorkingDirectory={{.RootDir}}/apps/{{.AppName}}/slots/%i
 EnvironmentFile=-{{.RootDir}}/apps/{{.AppName}}/slots/%i/env/runtime.env
-ExecStart={{.RootDir}}/apps/{{.AppName}}/slots/%i/bin/{{.AppName}}{{.ExecArgsSuffix}}
+ExecStart={{.RootDir}}/apps/{{.AppName}}/slots/%i/{{.ExecPath}}{{.ExecArgsSuffix}}
 Environment=VERNA_APP={{.AppName}}
 Environment=VERNA_SLOT=%i
 Restart=always
