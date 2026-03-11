@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/jackc/verna/internal/caddy"
 	"github.com/spf13/cobra"
 )
 
@@ -94,6 +95,17 @@ func resolveFileArg(val string) (string, error) {
 		return "", fmt.Errorf("reading file %s: %w", val[1:], err)
 	}
 	return strings.TrimRight(string(data), "\n"), nil
+}
+
+// resolveHandleTemplate resolves a caddy handle template value: preset name,
+// @file path, or literal template string. The expanded template is returned
+// so it can be stored in verna.json (presets are resolved at set time, not
+// at render time).
+func resolveHandleTemplate(val string) (string, error) {
+	if expanded, ok := caddy.ResolvePreset(val); ok {
+		return expanded, nil
+	}
+	return resolveFileArg(val)
 }
 
 func applyEnvDefaults(cmd *cobra.Command) {

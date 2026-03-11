@@ -146,6 +146,162 @@ func TestBuildRouteJSON_CustomTemplate(t *testing.T) {
 	}
 }
 
+func TestBuildRouteJSON_ProxyPreset(t *testing.T) {
+	cfg := RouteConfig{
+		AppName:             "myapp",
+		Domains:             []string{"myapp.example.com"},
+		Port:                18001,
+		SlotDir:             "/var/lib/verna/apps/myapp/slots/blue",
+		CaddyHandleTemplate: Presets["proxy"],
+	}
+
+	data, err := buildRouteJSON(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var route map[string]any
+	if err := json.Unmarshal(data, &route); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	handles := route["handle"].([]any)
+	if len(handles) != 1 {
+		t.Fatalf("expected 1 handler, got %d", len(handles))
+	}
+	handler := handles[0].(map[string]any)
+	if handler["handler"] != "reverse_proxy" {
+		t.Errorf("expected reverse_proxy handler, got %v", handler["handler"])
+	}
+}
+
+func TestBuildRouteJSON_StaticProxyPreset(t *testing.T) {
+	cfg := RouteConfig{
+		AppName:             "myapp",
+		Domains:             []string{"myapp.example.com"},
+		Port:                18001,
+		SlotDir:             "/var/lib/verna/apps/myapp/slots/blue",
+		CaddyHandleTemplate: Presets["static-proxy"],
+	}
+
+	data, err := buildRouteJSON(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var route map[string]any
+	if err := json.Unmarshal(data, &route); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	handles := route["handle"].([]any)
+	subroute := handles[0].(map[string]any)
+	if subroute["handler"] != "subroute" {
+		t.Fatalf("expected subroute handler, got %v", subroute["handler"])
+	}
+
+	routes := subroute["routes"].([]any)
+	if len(routes) != 2 {
+		t.Fatalf("expected 2 subroutes, got %d", len(routes))
+	}
+
+	// Route 1: file_server with pass_thru and precompressed.
+	r1 := routes[0].(map[string]any)
+	r1FileServer := r1["handle"].([]any)[0].(map[string]any)
+	if r1FileServer["handler"] != "file_server" {
+		t.Errorf("expected file_server handler, got %v", r1FileServer["handler"])
+	}
+	if r1FileServer["root"] != "/var/lib/verna/apps/myapp/slots/blue/public" {
+		t.Errorf("expected correct root, got %v", r1FileServer["root"])
+	}
+	if r1FileServer["pass_thru"] != true {
+		t.Errorf("expected pass_thru true, got %v", r1FileServer["pass_thru"])
+	}
+	if r1FileServer["precompressed"] == nil {
+		t.Error("expected precompressed to be set")
+	}
+
+	// Route 2: reverse_proxy fallback.
+	r2 := routes[1].(map[string]any)
+	r2Proxy := r2["handle"].([]any)[0].(map[string]any)
+	if r2Proxy["handler"] != "reverse_proxy" {
+		t.Errorf("expected reverse_proxy handler, got %v", r2Proxy["handler"])
+	}
+}
+
+func TestBuildRouteJSON_StaticProxyCachedPreset(t *testing.T) {
+	cfg := RouteConfig{
+		AppName:             "myapp",
+		Domains:             []string{"myapp.example.com"},
+		Port:                18001,
+		SlotDir:             "/var/lib/verna/apps/myapp/slots/blue",
+		CaddyHandleTemplate: Presets["static-proxy-cached"],
+	}
+
+	data, err := buildRouteJSON(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var route map[string]any
+	if err := json.Unmarshal(data, &route); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	handles := route["handle"].([]any)
+	subroute := handles[0].(map[string]any)
+	routes := subroute["routes"].([]any)
+	if len(routes) != 3 {
+		t.Fatalf("expected 3 subroutes, got %d", len(routes))
+	}
+
+	// Route 1: /assets/* with cache headers + file_server.
+	r1 := routes[0].(map[string]any)
+	r1Match := r1["match"].([]any)[0].(map[string]any)
+	r1Paths := r1Match["path"].([]any)
+	if len(r1Paths) != 1 || r1Paths[0] != "/assets/*" {
+		t.Errorf("expected path [/assets/*], got %v", r1Paths)
+	}
+	r1Handles := r1["handle"].([]any)
+	if len(r1Handles) != 2 {
+		t.Fatalf("expected 2 handlers for assets route, got %d", len(r1Handles))
+	}
+	r1Headers := r1Handles[0].(map[string]any)
+	if r1Headers["handler"] != "headers" {
+		t.Errorf("expected headers handler, got %v", r1Headers["handler"])
+	}
+	r1FileServer := r1Handles[1].(map[string]any)
+	if r1FileServer["handler"] != "file_server" {
+		t.Errorf("expected file_server handler, got %v", r1FileServer["handler"])
+	}
+
+	// Route 2: file_server with pass_thru.
+	r2 := routes[1].(map[string]any)
+	r2FileServer := r2["handle"].([]any)[0].(map[string]any)
+	if r2FileServer["handler"] != "file_server" {
+		t.Errorf("expected file_server handler, got %v", r2FileServer["handler"])
+	}
+	if r2FileServer["pass_thru"] != true {
+		t.Errorf("expected pass_thru true, got %v", r2FileServer["pass_thru"])
+	}
+
+	// Route 3: reverse_proxy fallback.
+	r3 := routes[2].(map[string]any)
+	r3Proxy := r3["handle"].([]any)[0].(map[string]any)
+	if r3Proxy["handler"] != "reverse_proxy" {
+		t.Errorf("expected reverse_proxy handler, got %v", r3Proxy["handler"])
+	}
+}
+
+func TestValidateHandleTemplate_PresetContent(t *testing.T) {
+	for _, name := range PresetNames() {
+		tmpl, _ := ResolvePreset(name)
+		if err := ValidateHandleTemplate(tmpl); err != nil {
+			t.Errorf("preset %q content failed validation: %v", name, err)
+		}
+	}
+}
+
 func TestValidateHandleTemplate_Valid(t *testing.T) {
 	err := ValidateHandleTemplate(`[{"handler": "reverse_proxy", "upstreams": [{"dial": "{{.Dial}}"}]}]`)
 	if err != nil {

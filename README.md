@@ -77,7 +77,7 @@ The server state file tracks all app configuration and deployment state:
     "myapp": {
       "domains": ["myapp.example.com"],
       "exec_path": "bin/myapp",
-      "caddy_handle_template": "[{\"handler\":\"subroute\",\"routes\":[{\"handle\":[{\"handler\":\"file_server\",\"root\":\"{{.SlotDir}}/public\",\"pass_thru\":true}]},{\"handle\":[{\"handler\":\"reverse_proxy\",\"upstreams\":[{\"dial\":\"{{.Dial}}\"}]}]}]}]",
+      "caddy_handle_template": "static-proxy",
       "health_check_path": "/health",
       "health_check_timeout": 15,
       "release_retention": 5,
@@ -142,10 +142,26 @@ Creates the directory structure, system user, systemd template unit, and Caddy r
 
 Options:
 - `--exec-path` (required) — relative path to the executable within the artifact directory (e.g. `bin/myapp`)
-- `--caddy-handle-template` — Go text/template producing the Caddy route handle JSON array (uses `{{.Dial}}` and `{{.SlotDir}}`; prefix with `@` to read from file, e.g. `@caddy-handle.json.tmpl`)
+- `--caddy-handle-template` — Caddy route handle configuration (default: `proxy`). Accepts a preset name, `@file` path, or inline Go text/template JSON (uses `{{.Dial}}` and `{{.SlotDir}}`)
 - `--domain` (required, repeatable) — domain name(s) for the app
 - `--health-check-path` — health check endpoint path (default: `/health`)
 - `--exec-arg` — arguments appended to the executable in ExecStart (repeatable)
+
+#### Caddy handle template presets
+
+| Preset | Description |
+|--------|-------------|
+| `proxy` | Reverse proxy only (default). For API-only apps with no static file serving. |
+| `static-proxy` | Try static files from `public/` first, fall back to reverse proxy. Includes precompressed file support (gzip, zstd, brotli). |
+| `static-proxy-cached` | Like `static-proxy` but with immutable cache headers (`Cache-Control: public, max-age=31536000, immutable`) on `/assets/*`. For apps using bundlers that produce content-hashed filenames. |
+
+For custom routing, pass a Go `text/template` that produces a JSON array of Caddy handlers. Use `@file` to read from a file:
+
+```sh
+verna app init --caddy-handle-template @caddy-handle.json.tmpl ...
+```
+
+Template variables: `{{.Dial}}` (e.g. `127.0.0.1:18001`) and `{{.SlotDir}}` (e.g. `/var/lib/verna/apps/myapp/slots/blue`).
 
 ### Manage environment variables
 
