@@ -304,6 +304,11 @@ func buildRouteWithPublicJSON(cfg RouteConfig) ([]byte, error) {
 								"handler":   "file_server",
 								"root":      cfg.SlotPublicRoot,
 								"pass_thru": true,
+								"precompressed": map[string]any{
+									"gzip": map[string]any{},
+									"zstd": map[string]any{},
+									"br":   map[string]any{},
+								},
 							},
 						},
 					},
