@@ -129,6 +129,11 @@ func (c *Client) Upload(reader io.Reader, remotePath string) error {
 	return nil
 }
 
+// Dial opens a TCP connection to the given address through the SSH tunnel.
+func (c *Client) Dial(network, addr string) (net.Conn, error) {
+	return c.client.Dial(network, addr)
+}
+
 func (c *Client) Close() error {
 	return c.client.Close()
 }

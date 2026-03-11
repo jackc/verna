@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/jackc/verna/internal/caddy"
 	"github.com/jackc/verna/internal/server"
 	"github.com/jackc/verna/internal/ssh"
 	"github.com/spf13/cobra"
@@ -37,7 +39,7 @@ func checkPrerequisites(client *ssh.Client) []checkResult {
 	}
 
 	// caddy
-	if _, err := client.Run("curl -sf localhost:2019/config/"); err != nil {
+	if caddyErr := caddy.PingAdminAPI(client); caddyErr != nil {
 		if _, pathErr := client.Run("which caddy"); pathErr != nil {
 			results = append(results, checkResult{"caddy", false, "admin API not responding and caddy not found in PATH"})
 		} else {
@@ -229,7 +231,14 @@ WantedBy=multi-user.target
 
 			// Verify admin API is responding.
 			fmt.Print("Waiting for Caddy admin API... ")
-			if _, err := client.Run("for i in 1 2 3 4 5; do curl -sf localhost:2019/config/ && exit 0; sleep 1; done; exit 1"); err != nil {
+			var pingErr error
+			for i := 0; i < 5; i++ {
+				if pingErr = caddy.PingAdminAPI(client); pingErr == nil {
+					break
+				}
+				time.Sleep(1 * time.Second)
+			}
+			if pingErr != nil {
 				return fmt.Errorf("caddy admin API not responding on localhost:2019 after 5 seconds")
 			}
 			fmt.Println("ok")
