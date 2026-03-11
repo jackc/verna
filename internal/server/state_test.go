@@ -33,7 +33,6 @@ func TestMarshalParseRoundTrip(t *testing.T) {
 				Port:       18001,
 				Release:    "20260307T120102Z-1f2e3d4",
 				DeployedAt: "2026-03-07T12:01:15Z",
-				Commit:     "1f2e3d4",
 			},
 			"green": {
 				Port: 18002,

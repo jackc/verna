@@ -1,8 +1,8 @@
 package deploy
 
 import (
-	"bytes"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -14,13 +14,13 @@ import (
 )
 
 type DeployConfig struct {
-	Client    *ssh.Client
-	RootDir   string
-	AppName   string
-	State     *server.ServerState
-	Artifact  *bytes.Buffer
-	Manifest  *Manifest
-	PublicPath string // relative path to public dir within artifact (for Caddy route)
+	Client        *ssh.Client
+	RootDir       string
+	AppName       string
+	State         *server.ServerState
+	TarballReader io.Reader
+	ReleaseID     string
+	PublicPath    string // relative path to public dir within artifact (for Caddy route)
 }
 
 type DeployResult struct {
@@ -44,47 +44,54 @@ func Deploy(cfg DeployConfig) (*DeployResult, error) {
 	targetPort := app.Slots[targetSlot].Port
 
 	appDir := fmt.Sprintf("%s/apps/%s", cfg.RootDir, cfg.AppName)
-	releaseDir := fmt.Sprintf("%s/releases/%s", appDir, cfg.Manifest.Release)
+	releaseDir := fmt.Sprintf("%s/releases/%s", appDir, cfg.ReleaseID)
 	slotLink := fmt.Sprintf("%s/slots/%s", appDir, targetSlot)
 	unitName := fmt.Sprintf("%s@%s.service", cfg.AppName, targetSlot)
 
 	// Step 2: Upload artifact.
 	fmt.Println("  Uploading artifact...")
-	tmpTarball := fmt.Sprintf("/tmp/verna-%s-%s.tar.gz", cfg.AppName, cfg.Manifest.Release)
-	if err := cfg.Client.Upload(cfg.Artifact, tmpTarball); err != nil {
+	tmpTarball := fmt.Sprintf("/tmp/verna-%s-%s.tar.gz", cfg.AppName, cfg.ReleaseID)
+	if err := cfg.Client.Upload(cfg.TarballReader, tmpTarball); err != nil {
 		return nil, fmt.Errorf("uploading artifact: %w", err)
 	}
 
 	// Step 3: Unpack to release directory.
-	fmt.Printf("  Unpacking to releases/%s...\n", cfg.Manifest.Release)
+	fmt.Printf("  Unpacking to releases/%s...\n", cfg.ReleaseID)
 	if _, err := cfg.Client.Run(fmt.Sprintf("mkdir -p %s && tar -xzf %s -C %s && rm -f %s", releaseDir, tmpTarball, releaseDir, tmpTarball)); err != nil {
 		return nil, fmt.Errorf("unpacking artifact: %w", err)
 	}
 
-	// Step 4: Set ownership.
+	// Step 4: Validate executable exists and is executable.
+	execPath := fmt.Sprintf("%s/%s", releaseDir, app.ExecPath)
+	if _, err := cfg.Client.Run(fmt.Sprintf("test -f %s && test -x %s", execPath, execPath)); err != nil {
+		cfg.Client.Run(fmt.Sprintf("rm -rf %s", releaseDir))
+		return nil, fmt.Errorf("executable %s not found or not executable in release", app.ExecPath)
+	}
+
+	// Step 5: Set ownership.
 	if _, err := cfg.Client.Run(fmt.Sprintf("chown -R %s:%s %s", app.User, app.Group, releaseDir)); err != nil {
 		return nil, fmt.Errorf("setting release ownership: %w", err)
 	}
 
-	// Step 5: Update slot symlink.
-	fmt.Printf("  Updating slot %s -> %s\n", targetSlot, cfg.Manifest.Release)
+	// Step 6: Update slot symlink.
+	fmt.Printf("  Updating slot %s -> %s\n", targetSlot, cfg.ReleaseID)
 	if _, err := cfg.Client.Run(fmt.Sprintf("ln -sfn %s %s", releaseDir, slotLink)); err != nil {
 		return nil, fmt.Errorf("updating slot symlink: %w", err)
 	}
 
-	// Step 6: Write runtime.env.
+	// Step 7: Write runtime.env.
 	fmt.Println("  Writing runtime.env...")
 	if err := server.WriteRuntimeEnv(cfg.Client, cfg.RootDir, cfg.AppName, targetSlot, targetPort, app.Env); err != nil {
 		return nil, fmt.Errorf("writing runtime.env: %w", err)
 	}
 
-	// Step 7: Restart systemd unit.
+	// Step 8: Restart systemd unit.
 	fmt.Printf("  Starting %s...\n", unitName)
 	if _, err := cfg.Client.Run(fmt.Sprintf("systemctl restart %s", unitName)); err != nil {
 		return nil, fmt.Errorf("restarting %s: %w", unitName, err)
 	}
 
-	// Step 8: Health check.
+	// Step 9: Health check.
 	healthTimeout := time.Duration(app.HealthCheckTimeout) * time.Second
 	fmt.Printf("  Waiting for health check (http://127.0.0.1:%d%s)...\n", targetPort, app.HealthCheckPath)
 	if err := health.WaitForHealthy(cfg.Client, targetPort, app.HealthCheckPath, healthTimeout); err != nil {
@@ -94,20 +101,21 @@ func Deploy(cfg DeployConfig) (*DeployResult, error) {
 	}
 	fmt.Println("  Health check passed")
 
-	// Step 9: Update Caddy route.
+	// Step 10: Update Caddy route.
+	hasPublic := cfg.PublicPath != ""
 	fmt.Printf("  Switching traffic to %s (port %d)...\n", targetSlot, targetPort)
 	routeCfg := caddy.RouteConfig{
 		AppName:        cfg.AppName,
 		Domains:        app.Domains,
 		Port:           targetPort,
-		HasPublic:      cfg.Manifest.HasPublic,
+		HasPublic:      hasPublic,
 		SlotPublicRoot: fmt.Sprintf("%s/slots/%s/%s", appDir, targetSlot, cfg.PublicPath),
 	}
 	if err := caddy.UpdateAppRoute(cfg.Client, routeCfg); err != nil {
 		return nil, fmt.Errorf("updating Caddy route: %w", err)
 	}
 
-	// Step 10: Stop old slot (skip on first deploy).
+	// Step 11: Stop old slot (skip on first deploy).
 	if activeSlot != "" {
 		oldUnit := fmt.Sprintf("%s@%s.service", cfg.AppName, activeSlot)
 		fmt.Printf("  Stopping %s...\n", oldUnit)
@@ -116,18 +124,17 @@ func Deploy(cfg DeployConfig) (*DeployResult, error) {
 		}
 	}
 
-	// Step 11: Update verna.json.
+	// Step 12: Update verna.json.
 	slot := app.Slots[targetSlot]
-	slot.Release = cfg.Manifest.Release
+	slot.Release = cfg.ReleaseID
 	slot.DeployedAt = time.Now().UTC().Format(time.RFC3339)
-	slot.Commit = cfg.Manifest.Commit
 	app.Slots[targetSlot] = slot
 	app.ActiveSlot = targetSlot
 	if err := server.WriteState(cfg.Client, cfg.RootDir, cfg.State); err != nil {
 		fmt.Printf("  Warning: failed to write state: %v\n", err)
 	}
 
-	// Step 12: Prune old releases.
+	// Step 13: Prune old releases.
 	pruned, err := pruneReleases(cfg.Client, cfg.RootDir, cfg.AppName, app)
 	if err != nil {
 		fmt.Printf("  Warning: prune failed: %v\n", err)
@@ -136,7 +143,7 @@ func Deploy(cfg DeployConfig) (*DeployResult, error) {
 	}
 
 	return &DeployResult{
-		Release:  cfg.Manifest.Release,
+		Release:  cfg.ReleaseID,
 		Slot:     targetSlot,
 		PrevSlot: activeSlot,
 		Port:     targetPort,

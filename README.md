@@ -25,8 +25,9 @@ Verna manages two **slots** per application (blue and green), each backed by a s
 ### Deploy sequence
 
 1. Determine the inactive slot
-2. Package and upload the artifact (tarball with manifest)
+2. Upload the tarball artifact
 3. Unpack into an immutable release directory
+3a. Validate the executable exists and is executable
 4. Update the slot's symlink to the new release
 5. Restart the slot's systemd unit
 6. Health check the new instance
@@ -89,15 +90,13 @@ The server state file tracks all app configuration and deployment state:
       "slots": {
         "blue": {
           "port": 18001,
-          "release": "20260307T120102Z-1f2e3d4",
-          "deployed_at": "2026-03-07T12:01:15Z",
-          "commit": "1f2e3d4"
+          "release": "20260307T120102Z-a1b2c3d4e5f6",
+          "deployed_at": "2026-03-07T12:01:15Z"
         },
         "green": {
           "port": 18002,
-          "release": "20260306T221500Z-aabbcc",
-          "deployed_at": "2026-03-06T22:15:12Z",
-          "commit": "aabbcc"
+          "release": "20260306T221500Z-f6e5d4c3b2a1",
+          "deployed_at": "2026-03-06T22:15:12Z"
         }
       }
     }
@@ -169,13 +168,14 @@ Environment variables are stored in `verna.json` and written to each slot's `env
 ### Deploy
 
 ```sh
-# Build your binary into an artifact directory, then deploy it
+# Build your binary and create a tarball, then deploy it
 mkdir -p dist/bin
 GOOS=linux GOARCH=amd64 go build -o dist/bin/myapp .
-verna --host myserver app --app myapp deploy dist/
+tar czf myapp.tar.gz -C dist .
+verna --host myserver app --app myapp deploy myapp.tar.gz
 ```
 
-The deploy command takes a directory as its argument. The entire directory is tar.gz'd and deployed. The binary path and public directory are configured as app-level settings (see `app init` above). Extra files in the artifact directory (templates, config, data) are deployed alongside the binary.
+The deploy command takes a `.tar.gz` file as its argument. The build system (goreleaser, Makefile, CI script, etc.) is responsible for producing the tarball. Verna uploads it to the server, unpacks it, and validates that the executable exists. The binary path and public directory are configured as app-level settings (see `app init` above).
 
 ### Check status
 
@@ -188,16 +188,14 @@ App:         myapp
 Active Slot: blue
 
 Slot blue (active) (port 18001):
-  Release:  20260307T120102Z-1f2e3d4
+  Release:  20260307T120102Z-a1b2c3d4e5f6
   Deployed: 2026-03-07T12:01:15Z
-  Commit:   1f2e3d4
   Service:  active
   Health:   200
 
 Slot green (port 18002):
-  Release:  20260306T221500Z-aabbcc
+  Release:  20260306T221500Z-f6e5d4c3b2a1
   Deployed: 2026-03-06T22:15:12Z
-  Commit:   aabbcc
   Service:  inactive
   Health:   unreachable
 ```
@@ -235,16 +233,15 @@ Removes old release directories beyond the retention count (default 5), preservi
   apps/
     myapp/
       releases/
-        20260307T120102Z-1f2e3d4/    # immutable release
-          manifest.json
+        20260307T120102Z-a1b2c3d4e5f6/  # immutable release
           bin/myapp
           public/
           env/runtime.env
-        20260306T221500Z-aabbcc/
+        20260306T221500Z-f6e5d4c3b2a1/
           ...
       slots/
-        blue -> ../releases/20260307T120102Z-1f2e3d4
-        green -> ../releases/20260306T221500Z-aabbcc
+        blue -> ../releases/20260307T120102Z-a1b2c3d4e5f6
+        green -> ../releases/20260306T221500Z-f6e5d4c3b2a1
       shared/                        # persistent mutable data
 ```
 
@@ -259,28 +256,16 @@ Releases are immutable. Slots are symlinks. Rollback is a symlink swap.
 
 ## Artifact format
 
-Artifacts are `.tar.gz` files created from the artifact directory you pass to `deploy`. The entire directory is included, plus a `manifest.json` prepended by verna:
+Artifacts are `.tar.gz` files produced by your build system. Verna does not create them — it only uploads and unpacks them. The tarball should contain your application files at the top level:
 
 ```
-manifest.json       # release metadata (added by verna)
 bin/myapp           # executable (path configured via --exec-path)
 public/             # static assets (optional, path configured via --public-path)
 templates/          # extra files are included as-is
-config.toml         # any other files in the directory
+config.toml         # any other files
 ```
 
-The `manifest.json` records the app name, release ID, git commit, build time, OS, and architecture:
-
-```json
-{
-  "app": "myapp",
-  "release": "20260307T120102Z-1f2e3d4",
-  "commit": "1f2e3d4",
-  "build_time": "2026-03-07T12:01:02Z",
-  "os": "linux",
-  "arch": "amd64"
-}
-```
+Release IDs are generated automatically from the deploy timestamp and a SHA-256 hash prefix of the tarball contents (e.g. `20260307T120102Z-a1b2c3d4e5f6`).
 
 ## CI example
 
@@ -289,7 +274,8 @@ The `manifest.json` records the app name, release ID, git commit, build time, OS
 mkdir -p dist/bin
 GOOS=linux GOARCH=amd64 go build -o dist/bin/myapp .
 cp -r templates dist/templates  # include extra files as needed
-verna --host myserver app --app myapp deploy dist/
+tar czf myapp.tar.gz -C dist .
+verna --host myserver app --app myapp deploy myapp.tar.gz
 ```
 
 ## Design decisions
@@ -301,5 +287,5 @@ verna --host myserver app --app myapp deploy dist/
 - **Server-wide `verna.json`** — single source of truth for all app config and deployment state
 - **Auto-assigned port pairs** — ports allocated from a starting range during `app init`
 - **Caddy admin API** — atomic upstream switching without config file rewriting
-- **Tarball artifacts** — atomic upload, verifiable, easy retention and rollback
+- **Pre-built tarballs** — build system produces `.tar.gz`; Verna uploads, unpacks, and validates
 - **Immutable releases** — rollback is a symlink swap + service restart

@@ -34,7 +34,6 @@ type SlotState struct {
 	Port       int    `json:"port"`
 	Release    string `json:"release,omitempty"`
 	DeployedAt string `json:"deployed_at,omitempty"`
-	Commit     string `json:"commit,omitempty"`
 }
 
 func NewServerState() *ServerState {

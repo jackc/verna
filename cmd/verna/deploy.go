@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"os/exec"
-	"strings"
+	"os"
+	"time"
 
 	"github.com/jackc/verna/internal/deploy"
 	"github.com/jackc/verna/internal/server"
@@ -11,30 +11,34 @@ import (
 )
 
 func newDeployCmd() *cobra.Command {
-	var (
-		commit     string
-		targetOS   string
-		targetArch string
-	)
-
 	cmd := &cobra.Command{
-		Use:   "deploy <artifact-dir>",
+		Use:   "deploy <tarball>",
 		Short: "Deploy an application to the server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			artifactDir := args[0]
+			tarballPath := args[0]
+
+			// Validate tarball exists and is a file.
+			info, err := os.Stat(tarballPath)
+			if err != nil {
+				return fmt.Errorf("tarball %s: %w", tarballPath, err)
+			}
+			if info.IsDir() {
+				return fmt.Errorf("tarball %s is a directory, not a file", tarballPath)
+			}
 
 			appName, err := requireApp()
 			if err != nil {
 				return err
 			}
 
-			// Auto-detect commit if not provided.
-			if commit == "" {
-				commit = detectGitCommit()
+			// Generate release ID from timestamp + tarball content hash.
+			releaseID, err := deploy.GenerateReleaseID(time.Now(), tarballPath)
+			if err != nil {
+				return fmt.Errorf("generating release ID: %w", err)
 			}
 
-			// Connect to server and read app config first (need exec/public paths).
+			// Connect to server and read app config.
 			client, err := connectToServer()
 			if err != nil {
 				return err
@@ -50,32 +54,22 @@ func newDeployCmd() *cobra.Command {
 				return fmt.Errorf("app %q not found (run `verna app init` first)", appName)
 			}
 
-			// Build artifact.
-			fmt.Println("Building artifact...")
-			buf, manifest, err := deploy.BuildArtifact(deploy.ArtifactOptions{
-				AppName:       appName,
-				ArtifactDir:   artifactDir,
-				ExecRelPath:   app.ExecPath,
-				PublicRelPath: app.PublicPath,
-				Commit:       commit,
-				OS:           targetOS,
-				Arch:         targetArch,
-			})
+			// Open tarball for streaming to server.
+			f, err := os.Open(tarballPath)
 			if err != nil {
-				return fmt.Errorf("building artifact: %w", err)
+				return fmt.Errorf("opening tarball: %w", err)
 			}
+			defer f.Close()
 
-			fmt.Printf("Artifact built: %s (%d bytes)\n", manifest.Release, buf.Len())
-
-			fmt.Printf("Deploying %s (release %s)...\n", appName, manifest.Release)
+			fmt.Printf("Deploying %s (release %s)...\n", appName, releaseID)
 			result, err := deploy.Deploy(deploy.DeployConfig{
-				Client:    client,
-				RootDir:   defaultRootDir,
-				AppName:   appName,
-				State:     state,
-				Artifact:  buf,
-				Manifest:  manifest,
-				PublicPath: app.PublicPath,
+				Client:        client,
+				RootDir:       defaultRootDir,
+				AppName:       appName,
+				State:         state,
+				TarballReader: f,
+				ReleaseID:     releaseID,
+				PublicPath:    app.PublicPath,
 			})
 			if err != nil {
 				return fmt.Errorf("deploy failed: %w", err)
@@ -92,19 +86,5 @@ func newDeployCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&commit, "commit", "", "git commit hash (auto-detected if omitted)")
-	cmd.Flags().StringVar(&targetOS, "os", "linux", "target operating system")
-	cmd.Flags().StringVar(&targetArch, "arch", "amd64", "target architecture")
-
 	return cmd
-}
-
-// detectGitCommit attempts to get the current git commit hash.
-// Returns empty string on any failure.
-func detectGitCommit() string {
-	out, err := exec.Command("git", "rev-parse", "--short=7", "HEAD").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }
