@@ -99,6 +99,7 @@ func newAppInitCmd() *cobra.Command {
 		healthCheckTimeout int
 		releaseRetention   int
 		execArgs           []string
+		caddyServer        string
 	)
 
 	cmd := &cobra.Command{
@@ -204,13 +205,18 @@ func newAppInitCmd() *cobra.Command {
 
 			// Configure Caddy route.
 			fmt.Println("Configuring Caddy route...")
-			if err := caddy.EnsureVernaCaddyServer(client); err != nil {
-				return fmt.Errorf("configuring Caddy server: %w", err)
+			serverName, err := caddy.ResolveCaddyServer(client, caddyServer)
+			if err != nil {
+				return fmt.Errorf("resolving Caddy server: %w", err)
+			}
+			if err := caddy.EnsureServerRoutes(client, serverName); err != nil {
+				return fmt.Errorf("ensuring Caddy routes: %w", err)
 			}
 			if err := caddy.AddAppRoute(client, caddy.RouteConfig{
-				AppName: appName,
-				Domains: domains,
-				Port:    bluePort,
+				AppName:     appName,
+				CaddyServer: serverName,
+				Domains:     domains,
+				Port:        bluePort,
 			}); err != nil {
 				return fmt.Errorf("adding Caddy route: %w", err)
 			}
@@ -226,6 +232,7 @@ func newAppInitCmd() *cobra.Command {
 				User:               systemUser,
 				Group:              systemUser,
 				ExecArgs:           execArgs,
+				CaddyServer:        serverName,
 				ActiveSlot:         "",
 				Slots: map[string]server.SlotState{
 					"blue":  {Port: bluePort},
@@ -255,6 +262,7 @@ func newAppInitCmd() *cobra.Command {
 	cmd.Flags().IntVar(&healthCheckTimeout, "health-check-timeout", 15, "health check timeout in seconds")
 	cmd.Flags().IntVar(&releaseRetention, "release-retention", 5, "number of releases to retain")
 	cmd.Flags().StringArrayVar(&execArgs, "exec-arg", nil, "argument to append to the executable in ExecStart (repeatable)")
+	cmd.Flags().StringVar(&caddyServer, "caddy-server", "", "name of existing Caddy HTTP server to add routes to (auto-detected if only one exists)")
 
 	return cmd
 }

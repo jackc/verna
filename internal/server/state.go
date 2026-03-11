@@ -25,6 +25,7 @@ type AppState struct {
 	User               string              `json:"user"`
 	Group              string              `json:"group"`
 	ExecArgs           []string             `json:"exec_args,omitempty"`
+	CaddyServer        string              `json:"caddy_server"`
 	Env                map[string]string    `json:"env,omitempty"`
 	ActiveSlot         string              `json:"active_slot"`
 	Slots              map[string]SlotState `json:"slots"`
