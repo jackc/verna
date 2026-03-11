@@ -51,6 +51,7 @@ func main() {
 	appCmd := newAppCmd()
 	appCmd.AddCommand(newAppInitCmd())
 	configCmd := newConfigCmd()
+	configCmd.AddCommand(newConfigGetCmd())
 	configCmd.AddCommand(newConfigSetCmd())
 	configCmd.AddCommand(newConfigListCmd())
 	appCmd.AddCommand(configCmd)
