@@ -205,15 +205,14 @@ func newAppInitCmd() *cobra.Command {
 			// Configure Caddy route.
 			fmt.Println("Configuring Caddy route...")
 			if err := caddy.EnsureVernaCaddyServer(client); err != nil {
-				fmt.Printf("  Warning: could not configure Caddy server: %v\n", err)
-				fmt.Println("  Caddy route will be configured on first deploy.")
-			} else if err := caddy.AddAppRoute(client, caddy.RouteConfig{
+				return fmt.Errorf("configuring Caddy server: %w", err)
+			}
+			if err := caddy.AddAppRoute(client, caddy.RouteConfig{
 				AppName: appName,
 				Domains: domains,
 				Port:    bluePort,
 			}); err != nil {
-				fmt.Printf("  Warning: could not add Caddy route: %v\n", err)
-				fmt.Println("  Caddy route will be configured on first deploy.")
+				return fmt.Errorf("adding Caddy route: %w", err)
 			}
 
 			// Register app in state.
