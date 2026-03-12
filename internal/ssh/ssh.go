@@ -134,6 +134,21 @@ func (c *Client) Dial(network, addr string) (net.Conn, error) {
 	return c.client.Dial(network, addr)
 }
 
+// RunStreaming executes a command on the remote server, streaming stdout and stderr
+// to the provided writers. It blocks until the command exits or the connection drops.
+func (c *Client) RunStreaming(cmd string, stdout, stderr io.Writer) error {
+	session, err := c.client.NewSession()
+	if err != nil {
+		return fmt.Errorf("creating SSH session: %w", err)
+	}
+	defer session.Close()
+
+	session.Stdout = stdout
+	session.Stderr = stderr
+
+	return session.Run(cmd)
+}
+
 func (c *Client) Close() error {
 	return c.client.Close()
 }
