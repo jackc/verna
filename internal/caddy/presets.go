@@ -13,9 +13,12 @@ var Presets = map[string]string{
 	// Common for web apps that serve static assets alongside a backend.
 	"static-proxy": `[{"handler":"subroute","routes":[{"handle":[{"handler":"file_server","root":"{{.SlotDir}}/public","pass_thru":true,"precompressed":{"gzip":{},"zstd":{},"br":{}}}]},{"handle":[{"handler":"reverse_proxy","upstreams":[{"dial":"{{.Dial}}"}]}]}]}]`,
 
-	// static-proxy-cached: like static-proxy but with immutable cache headers on /assets/*.
-	// For apps using bundlers (Vite, esbuild, webpack) that produce content-hashed filenames.
-	"static-proxy-cached": `[{"handler":"subroute","routes":[{"match":[{"path":["/assets/*"]}],"handle":[{"handler":"headers","response":{"set":{"Cache-Control":["public, max-age=31536000, immutable"]}}},{"handler":"file_server","root":"{{.SlotDir}}/public","precompressed":{"gzip":{},"zstd":{},"br":{}}}]},{"handle":[{"handler":"file_server","root":"{{.SlotDir}}/public","pass_thru":true,"precompressed":{"gzip":{},"zstd":{},"br":{}}}]},{"handle":[{"handler":"reverse_proxy","upstreams":[{"dial":"{{.Dial}}"}]}]}]}]`,
+	// spa-proxy: SPA with reverse-proxied API. For SvelteKit (adapter-static) or similar SPA
+	// frameworks with client-side path-based routing. Three routes:
+	//   /assets/* — immutable static assets with aggressive cache headers
+	//   /api/*   — reverse proxy to backend
+	//   *        — try file, then fall back to index.html for client-side routing
+	"spa-proxy": `[{"handler":"subroute","routes":[{"match":[{"path":["/assets/*"]}],"handle":[{"handler":"headers","response":{"set":{"Cache-Control":["public, max-age=31536000, immutable"]}}},{"handler":"file_server","root":"{{.SlotDir}}/public","precompressed":{"gzip":{},"zstd":{},"br":{}}}]},{"match":[{"path":["/api/*"]}],"handle":[{"handler":"reverse_proxy","upstreams":[{"dial":"{{.Dial}}"}]}]},{"handle":[{"handler":"file_server","root":"{{.SlotDir}}/public","pass_thru":true,"precompressed":{"gzip":{},"zstd":{},"br":{}}},{"handler":"rewrite","uri":"/index.html"},{"handler":"file_server","root":"{{.SlotDir}}/public"}]}]}]`,
 }
 
 // ResolvePreset returns the expanded template for a known preset name.

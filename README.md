@@ -114,7 +114,7 @@ Options:
 |--------|-------------|
 | `proxy` | Reverse proxy only (default). For API-only apps with no static file serving. |
 | `static-proxy` | Try static files from `public/` first, fall back to reverse proxy. Includes precompressed file support (gzip, zstd, brotli). |
-| `static-proxy-cached` | Like `static-proxy` but with immutable cache headers (`Cache-Control: public, max-age=31536000, immutable`) on `/assets/*`. For apps using bundlers that produce content-hashed filenames. |
+| `spa-proxy` | SPA with reverse-proxied API. Serves `/assets/*` with immutable cache headers, proxies `/api/*` to the backend, and falls back to `index.html` for client-side routing. For SvelteKit (adapter-static) or similar SPA frameworks. |
 
 For custom routing, pass a Go `text/template` that produces a JSON array of Caddy handlers. Use `@file` to read from a file:
 

@@ -179,7 +179,7 @@ func newConfigSetCmd() *cobra.Command {
 
 	cmd.Flags().StringArrayVar(&domains, "domain", nil, "domain name for the app (repeatable, replaces all existing domains)")
 	cmd.Flags().StringVar(&execPath, "exec-path", "", "relative path to executable in artifact directory")
-	cmd.Flags().StringVar(&caddyHandleTemplate, "caddy-handle-template", "", "Caddy route handle: preset name (proxy, static-proxy, static-proxy-cached), @file path, or Go text/template JSON (uses {{.Dial}} and {{.SlotDir}})")
+	cmd.Flags().StringVar(&caddyHandleTemplate, "caddy-handle-template", "", "Caddy route handle: preset name (proxy, static-proxy, spa-proxy), @file path, or Go text/template JSON (uses {{.Dial}} and {{.SlotDir}})")
 	cmd.Flags().StringVar(&healthCheckPath, "health-check-path", "", "health check endpoint path")
 	cmd.Flags().IntVar(&healthCheckTimeout, "health-check-timeout", 0, "health check timeout in seconds")
 	cmd.Flags().IntVar(&releaseRetention, "release-retention", 0, "number of releases to retain")

@@ -269,7 +269,7 @@ func newAppInitCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&domains, "domain", nil, "domain name for the app (repeatable, at least one required)")
 	cmd.Flags().StringVar(&execPath, "exec-path", "", "relative path to executable in artifact directory (e.g. bin/myapp)")
 	cmd.MarkFlagRequired("exec-path")
-	cmd.Flags().StringVar(&caddyHandleTemplate, "caddy-handle-template", "proxy", "Caddy route handle: preset name (proxy, static-proxy, static-proxy-cached), @file path, or Go text/template JSON (uses {{.Dial}} and {{.SlotDir}})")
+	cmd.Flags().StringVar(&caddyHandleTemplate, "caddy-handle-template", "proxy", "Caddy route handle: preset name (proxy, static-proxy, spa-proxy), @file path, or Go text/template JSON (uses {{.Dial}} and {{.SlotDir}})")
 	cmd.Flags().StringVar(&healthCheckPath, "health-check-path", "/health", "health check endpoint path")
 	cmd.Flags().IntVar(&healthCheckTimeout, "health-check-timeout", 15, "health check timeout in seconds")
 	cmd.Flags().IntVar(&releaseRetention, "release-retention", 5, "number of releases to retain")
