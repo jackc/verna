@@ -1,53 +1,36 @@
 # Verna
 
-A systemd-native blue/green deployment tool for compiled web applications.
+A blue/green deployment tool for compiled web applications managed by systemd and listening behind a Caddy reverse-proxy.
 
 Verna deploys pre-compiled binaries (Go, Rust, C, etc.) to Ubuntu servers using systemd, Caddy, and SSH. No Docker, no buildpacks, no server-side compilation.
+
+Verna was designed for my deployment preferences. If your needs are the same, verna may work for you. Otherwise, verna will likely not be useful to you.
 
 ## How it works
 
 Verna manages two **slots** per application (blue and green), each backed by a systemd service instance listening on a fixed local port. At any time, only one slot is live — Caddy reverse-proxies traffic to it. Deploying targets the inactive slot, and Caddy switches over only after a health check passes. The previous slot remains available for instant rollback.
-
-```
-                ┌──────────┐
-  traffic ──▶   │  Caddy   │
-                └────┬─────┘
-                     │
-              ┌──────┴──────┐
-              ▼             ▼
-        ┌──────────┐  ┌──────────┐
-        │  blue    │  │  green   │
-        │ :18001   │  │ :18002   │
-        └──────────┘  └──────────┘
-         (active)      (standby)
-```
 
 ### Deploy sequence
 
 1. Determine the inactive slot
 2. Upload the tarball artifact
 3. Unpack into an immutable release directory
-3a. Validate the executable exists and is executable
-4. Update the slot's symlink to the new release
-5. Restart the slot's systemd unit
-6. Health check the new instance
-7. Switch Caddy's upstream to the new slot
-8. Stop the old slot
+4. Validate the executable exists and is executable
+5. Update the slot's symlink to the new release
+6. Restart the slot's systemd unit
+7. Health check the new instance
+8. Switch Caddy's upstream to the new slot
+9. Stop the old slot
+10. Prune old releases beyond retention limit
 
 If the health check fails, the old slot stays live — nothing changes.
 
 ## Installation
 
+Download from Github Releases or install with `go install`:
+
 ```sh
 go install github.com/jackc/verna/cmd/verna@latest
-```
-
-Or build from source:
-
-```sh
-git clone https://github.com/jackc/verna.git
-cd verna
-go build -o verna ./cmd/verna
 ```
 
 ## Configuration
@@ -55,54 +38,22 @@ go build -o verna ./cmd/verna
 There is no local configuration file. Server connection is specified via CLI flags on every command:
 
 ```sh
-verna --host myserver.example.com <command>
+verna --ssh-host myserver.example.com <command>
 ```
 
 Global flags:
-- `--host` — server hostname (required)
-- `--user` — SSH user (default: root)
-- `--port` — SSH port (default: 22)
-- `--key-file` — path to SSH private key (optional, also tries SSH agent)
+- `--ssh-host` — server hostname (required)
+- `--ssh-user` — SSH user (default: root)
+- `--ssh-port` — SSH port (default: 22)
+- `--ssh-key-file` — path to SSH private key (optional, also tries SSH agent)
 
-All app configuration (domains, env vars, health check settings, ports) lives on the server in `/var/lib/verna/verna.json`. Configuration is set via CLI commands like `verna app init` and `verna app env set`.
+All global flags support `VERNA_` environment variable equivalents (e.g. `VERNA_SSH_HOST`). The `--app` flag supports `VERNA_APP`.
 
-### Server state (`verna.json`)
+All app configuration (domains, env vars, health check settings, ports) lives on the server in `/var/lib/verna/verna.json`. Configuration is set via CLI commands like `verna app init` and `verna app config set`.
 
-The server state file tracks all app configuration and deployment state:
+### Server state
 
-```json
-{
-  "next_port": 18005,
-  "apps": {
-    "myapp": {
-      "domains": ["myapp.example.com"],
-      "exec_path": "bin/myapp",
-      "caddy_handle_template": "static-proxy",
-      "health_check_path": "/health",
-      "health_check_timeout": 15,
-      "release_retention": 5,
-      "user": "myapp",
-      "group": "myapp",
-      "env": {
-        "DATABASE_URL": "postgres://localhost/myapp"
-      },
-      "active_slot": "blue",
-      "slots": {
-        "blue": {
-          "port": 18001,
-          "release": "20260307T120102Z-a1b2c3d4e5f6",
-          "deployed_at": "2026-03-07T12:01:15Z"
-        },
-        "green": {
-          "port": 18002,
-          "release": "20260306T221500Z-f6e5d4c3b2a1",
-          "deployed_at": "2026-03-06T22:15:12Z"
-        }
-      }
-    }
-  }
-}
-```
+The server state file `/var/lib/verna/verna.json` tracks all app configuration and deployment state.
 
 Port pairs are auto-assigned during `app init`. Environment variables are managed via `verna app env set` and written to each slot's `env/runtime.env` automatically.
 
@@ -118,8 +69,10 @@ Your application must:
 
 ### Install Caddy
 
+Caddy is required. You may install it via your package manager or manually or you may have verna install it:
+
 ```sh
-verna --host myserver server install-caddy
+verna --ssh-host myserver server install-caddy
 ```
 
 Downloads the latest Caddy release from GitHub, installs it to `/usr/local/bin`, creates a `caddy` system user, sets up a systemd unit, and verifies the admin API is responding on `localhost:2019`. Caddy is configured to run with `--resume`, so configuration pushed via the admin API is automatically persisted and restored on restart.
@@ -127,15 +80,23 @@ Downloads the latest Caddy release from GitHub, installs it to `/usr/local/bin`,
 ### Initialize the server
 
 ```sh
-verna --host myserver server init
+verna --ssh-host myserver server init
 ```
 
 Creates `/var/lib/verna/` and an empty `verna.json` on the server. This is a one-time setup step.
 
+### Check server prerequisites
+
+```sh
+verna --ssh-host myserver server doctor
+```
+
+Verifies that the server has all required prerequisites: systemd, Caddy running with admin API, and curl.
+
 ### Initialize an app
 
 ```sh
-verna --host myserver app --app myapp init --domain myapp.example.com --exec-path bin/myapp
+verna --ssh-host myserver app --app myapp init --domain myapp.example.com --exec-path bin/myapp
 ```
 
 Creates the directory structure, system user, systemd template unit, and Caddy route on the server. Registers the app in `verna.json` with auto-assigned ports.
@@ -158,25 +119,38 @@ Options:
 For custom routing, pass a Go `text/template` that produces a JSON array of Caddy handlers. Use `@file` to read from a file:
 
 ```sh
-verna app init --caddy-handle-template @caddy-handle.json.tmpl ...
+verna app --app myapp init --caddy-handle-template @caddy-handle.json.tmpl ...
 ```
 
 Template variables: `{{.Dial}}` (e.g. `127.0.0.1:18001`) and `{{.SlotDir}}` (e.g. `/var/lib/verna/apps/myapp/slots/blue`).
+
+### Manage app configuration
+
+```sh
+# List all settings
+verna --ssh-host myserver app --app myapp config list
+
+# Get a single setting
+verna --ssh-host myserver app --app myapp config get exec-path
+
+# Update settings (regenerates systemd unit and Caddy route as needed)
+verna --ssh-host myserver app --app myapp config set --domain newdomain.example.com --health-check-timeout 30
+```
 
 ### Manage environment variables
 
 ```sh
 # Set one or more variables (restarts the active slot)
-verna --host myserver app env set myapp DATABASE_URL=postgres://localhost/myapp SECRET_KEY=hunter2
+verna --ssh-host myserver app --app myapp env set DATABASE_URL=postgres://localhost/myapp SECRET_KEY=hunter2
 
 # List all variables
-verna --host myserver app env list myapp
+verna --ssh-host myserver app --app myapp env list
 
 # Get a single variable (scriptable)
-verna --host myserver app env get myapp DATABASE_URL
+verna --ssh-host myserver app --app myapp env get DATABASE_URL
 
 # Remove a variable (restarts the active slot)
-verna --host myserver app env unset myapp SECRET_KEY
+verna --ssh-host myserver app --app myapp env unset SECRET_KEY
 ```
 
 Environment variables are stored in `verna.json` and written to each slot's `env/runtime.env` file. The `PORT` variable is reserved and managed automatically by verna.
@@ -188,38 +162,39 @@ Environment variables are stored in `verna.json` and written to each slot's `env
 mkdir -p dist/bin
 GOOS=linux GOARCH=amd64 go build -o dist/bin/myapp .
 tar czf myapp.tar.gz -C dist .
-verna --host myserver app --app myapp deploy myapp.tar.gz
+verna --ssh-host myserver app --app myapp deploy myapp.tar.gz
 ```
 
 The deploy command takes a `.tar.gz` file as its argument. The build system (goreleaser, Makefile, CI script, etc.) is responsible for producing the tarball. Verna uploads it to the server, unpacks it, and validates that the executable exists. The binary path is configured as an app-level setting (see `app init` above). Caddy routing behavior is controlled via `--caddy-handle-template`.
 
+Old releases beyond the retention limit (default 5) are automatically pruned after each successful deploy.
+
 ### Check status
 
 ```sh
-verna --host myserver status myapp
+verna --ssh-host myserver app --app myapp status
 ```
 
 ```
-App:         myapp
-Active Slot: blue
+App:        myapp
+Domains:    myapp.example.com
 
-Slot blue (active) (port 18001):
-  Release:  20260307T120102Z-a1b2c3d4e5f6
-  Deployed: 2026-03-07T12:01:15Z
-  Service:  active
-  Health:   200
+Active:     blue (port 18001)
+Release:    20260307T120102Z-a1b2c3d4e5f6
+Deployed:   2026-03-07T12:01:15Z
+Service:    active
+Health:     200
 
-Slot green (port 18002):
-  Release:  20260306T221500Z-f6e5d4c3b2a1
-  Deployed: 2026-03-06T22:15:12Z
-  Service:  inactive
-  Health:   unreachable
+Inactive:   green (port 18002)
+Release:    20260306T221500Z-f6e5d4c3b2a1
+Deployed:   2026-03-06T22:15:12Z
+Service:    inactive
 ```
 
 ### Rollback
 
 ```sh
-verna --host myserver rollback myapp
+verna --ssh-host myserver app --app myapp rollback
 ```
 
 Restarts the previous slot, health checks it, then switches Caddy back.
@@ -227,19 +202,26 @@ Restarts the previous slot, health checks it, then switches Caddy back.
 ### View logs
 
 ```sh
-verna --host myserver logs myapp              # active slot
-verna --host myserver logs myapp --slot blue  # specific slot
-verna --host myserver logs myapp -f           # follow
-verna --host myserver logs myapp -n 100       # last 100 lines
+verna --ssh-host myserver app --app myapp logs              # both slots (interleaved by timestamp)
+verna --ssh-host myserver app --app myapp logs --slot blue   # specific slot
+verna --ssh-host myserver app --app myapp logs -f            # follow
+verna --ssh-host myserver app --app myapp logs -n 100        # last 100 lines
 ```
 
-### Prune old releases
+Extra arguments after `--` are passed through to journalctl:
 
 ```sh
-verna --host myserver prune myapp
+verna --ssh-host myserver app --app myapp logs -- --since "1 hour ago"
+verna --ssh-host myserver app --app myapp logs -- --grep "panic" --priority err
 ```
 
-Removes old release directories beyond the retention count (default 5), preserving any release currently referenced by either slot.
+### Delete an app
+
+```sh
+verna --ssh-host myserver app --app myapp delete
+```
+
+Stops services, removes the systemd unit, Caddy route, app directory, and state entry. Prompts for confirmation (use `--yes` to skip).
 
 ## Server layout
 
@@ -268,18 +250,11 @@ Releases are immutable. Slots are symlinks. Rollback is a symlink swap.
 - **Ubuntu** with systemd and journald
 - **Caddy** running with the admin API enabled (default on `localhost:2019`)
 - **Root SSH access** from your local machine to the server
-- **curl** on the server (used for health checks and Caddy API calls)
+- **curl** on the server (used for health checks in `status`)
 
 ## Artifact format
 
-Artifacts are `.tar.gz` files produced by your build system. Verna does not create them — it only uploads and unpacks them. The tarball should contain your application files at the top level:
-
-```
-bin/myapp           # executable (path configured via --exec-path)
-public/             # static assets (optional, referenced in --caddy-handle-template)
-templates/          # extra files are included as-is
-config.toml         # any other files
-```
+Artifacts are `.tar.gz` files produced by your build system. There is no specific format. The app `--exec-path` and `--caddy-handle-template` control what executable is run and what assets to serve.
 
 Release IDs are generated automatically from the deploy timestamp and a SHA-256 hash prefix of the tarball contents (e.g. `20260307T120102Z-a1b2c3d4e5f6`).
 
@@ -291,7 +266,7 @@ mkdir -p dist/bin
 GOOS=linux GOARCH=amd64 go build -o dist/bin/myapp .
 cp -r templates dist/templates  # include extra files as needed
 tar czf myapp.tar.gz -C dist .
-verna --host myserver app --app myapp deploy myapp.tar.gz
+verna --ssh-host myserver app --app myapp deploy myapp.tar.gz
 ```
 
 ## Design decisions
@@ -305,3 +280,11 @@ verna --host myserver app --app myapp deploy myapp.tar.gz
 - **Caddy admin API** — atomic upstream switching without config file rewriting
 - **Pre-built tarballs** — build system produces `.tar.gz`; Verna uploads, unpacks, and validates
 - **Immutable releases** — rollback is a symlink swap + service restart
+
+## Contributing
+
+verna is open source, but closed contribution. It's designed for my personal needs and preferences. You may submit issues, but unless your needs and preferences align exactly with mine it is unlikely they will be accepted. Please do not submit PR's. In the unlikely event that a suggested change is accepted, then I will implement it myself.
+
+## License
+
+MIT
