@@ -2,12 +2,15 @@ package caddy
 
 import "sort"
 
+// DefaultHandleTemplate is the proxy preset, used as fallback for pre-deploy Caddy routes.
+const DefaultHandleTemplate = `[{"handler":"reverse_proxy","upstreams":[{"dial":"{{.Dial}}"}]}]`
+
 // Presets maps preset names to their Caddy handle template strings.
 // These are resolved by renderHandleTemplate when the template value
 // matches a known preset name.
 var Presets = map[string]string{
 	// proxy: reverse proxy only (default). For API-only apps with no static file serving.
-	"proxy": `[{"handler":"reverse_proxy","upstreams":[{"dial":"{{.Dial}}"}]}]`,
+	"proxy": DefaultHandleTemplate,
 
 	// static-proxy: try static files first, fall back to reverse proxy.
 	// Common for web apps that serve static assets alongside a backend.

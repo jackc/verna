@@ -16,25 +16,35 @@ type ServerState struct {
 }
 
 type AppState struct {
-	Domains            []string            `json:"domains"`
-	ExecPath           string              `json:"exec_path"`
-	CaddyHandleTemplate string             `json:"caddy_handle_template,omitempty"`
-	HealthCheckPath    string              `json:"health_check_path"`
-	HealthCheckTimeout int                 `json:"health_check_timeout"`
-	ReleaseRetention   int                 `json:"release_retention"`
-	User               string              `json:"user"`
-	Group              string              `json:"group"`
-	ExecArgs           []string             `json:"exec_args,omitempty"`
-	CaddyServer        string              `json:"caddy_server"`
-	Env                map[string]string    `json:"env,omitempty"`
-	ActiveSlot         string              `json:"active_slot"`
-	Slots              map[string]SlotState `json:"slots"`
+	Domains                []string            `json:"domains"`
+	ExecPath               string              `json:"exec_path"`
+	CaddyHandleTemplatePath string             `json:"caddy_handle_template_path,omitempty"`
+	HealthCheckPath        string              `json:"health_check_path"`
+	HealthCheckTimeout     int                 `json:"health_check_timeout"`
+	ReleaseRetention       int                 `json:"release_retention"`
+	User                   string              `json:"user"`
+	Group                  string              `json:"group"`
+	ExecArgs               []string             `json:"exec_args,omitempty"`
+	CaddyServer            string              `json:"caddy_server"`
+	Env                    map[string]string    `json:"env,omitempty"`
+	ActiveSlot             string              `json:"active_slot"`
+	Slots                  map[string]SlotState `json:"slots"`
 }
 
 type SlotState struct {
-	Port       int    `json:"port"`
-	Release    string `json:"release,omitempty"`
-	DeployedAt string `json:"deployed_at,omitempty"`
+	Port                int    `json:"port"`
+	Release             string `json:"release,omitempty"`
+	DeployedAt          string `json:"deployed_at,omitempty"`
+	CaddyHandleTemplate string `json:"caddy_handle_template,omitempty"`
+}
+
+// EffectiveCaddyHandleTemplate returns the Caddy handle template for the given slot.
+// Returns the slot's template if set, otherwise empty string.
+func (a *AppState) EffectiveCaddyHandleTemplate(slotName string) string {
+	if slot, ok := a.Slots[slotName]; ok && slot.CaddyHandleTemplate != "" {
+		return slot.CaddyHandleTemplate
+	}
+	return ""
 }
 
 func NewServerState() *ServerState {

@@ -14,13 +14,13 @@ import (
 )
 
 type DeployConfig struct {
-	Client        *ssh.Client
-	RootDir       string
-	AppName       string
-	State         *server.ServerState
-	TarballReader io.Reader
-	ReleaseID     string
-	CaddyHandleTemplate string // Go text/template for the Caddy route handle array
+	Client                  *ssh.Client
+	RootDir                 string
+	AppName                 string
+	State                   *server.ServerState
+	TarballReader           io.Reader
+	ReleaseID               string
+	CaddyHandleTemplatePath string // path within artifact to the Caddy handle template file
 }
 
 type DeployResult struct {
@@ -68,30 +68,48 @@ func Deploy(cfg DeployConfig) (*DeployResult, error) {
 		return nil, fmt.Errorf("executable %s not found or not executable in release", app.ExecPath)
 	}
 
-	// Step 5: Set ownership.
+	// Step 5: Read caddy handle template from artifact.
+	caddyTemplatePath := cfg.CaddyHandleTemplatePath
+	if caddyTemplatePath == "" {
+		caddyTemplatePath = "deploy/caddy-handle-template.json"
+	}
+	fmt.Printf("  Reading caddy handle template from %s...\n", caddyTemplatePath)
+	caddyTemplateFile := fmt.Sprintf("%s/%s", releaseDir, caddyTemplatePath)
+	caddyHandleTemplate, err := cfg.Client.Run(fmt.Sprintf("cat %q", caddyTemplateFile))
+	if err != nil {
+		cfg.Client.Run(fmt.Sprintf("rm -rf %s", releaseDir))
+		return nil, fmt.Errorf("caddy handle template not found at %s in artifact: %w", caddyTemplatePath, err)
+	}
+	caddyHandleTemplate = strings.TrimRight(caddyHandleTemplate, "\n")
+	if err := caddy.ValidateHandleTemplate(caddyHandleTemplate); err != nil {
+		cfg.Client.Run(fmt.Sprintf("rm -rf %s", releaseDir))
+		return nil, fmt.Errorf("invalid caddy handle template in %s: %w", caddyTemplatePath, err)
+	}
+
+	// Step 6: Set ownership.
 	if _, err := cfg.Client.Run(fmt.Sprintf("chown -R %s:%s %s", app.User, app.Group, releaseDir)); err != nil {
 		return nil, fmt.Errorf("setting release ownership: %w", err)
 	}
 
-	// Step 6: Update slot symlink.
+	// Step 7: Update slot symlink.
 	fmt.Printf("  Updating slot %s -> %s\n", targetSlot, cfg.ReleaseID)
 	if _, err := cfg.Client.Run(fmt.Sprintf("ln -sfn %s %s", releaseDir, slotLink)); err != nil {
 		return nil, fmt.Errorf("updating slot symlink: %w", err)
 	}
 
-	// Step 7: Write runtime.env.
+	// Step 8: Write runtime.env.
 	fmt.Println("  Writing runtime.env...")
 	if err := server.WriteRuntimeEnv(cfg.Client, cfg.RootDir, cfg.AppName, targetSlot, targetPort, app.Env); err != nil {
 		return nil, fmt.Errorf("writing runtime.env: %w", err)
 	}
 
-	// Step 8: Restart systemd unit.
+	// Step 9: Restart systemd unit.
 	fmt.Printf("  Starting %s...\n", unitName)
 	if _, err := cfg.Client.Run(fmt.Sprintf("systemctl restart %s", unitName)); err != nil {
 		return nil, fmt.Errorf("restarting %s: %w", unitName, err)
 	}
 
-	// Step 9: Health check.
+	// Step 10: Health check.
 	healthTimeout := time.Duration(app.HealthCheckTimeout) * time.Second
 	fmt.Printf("  Waiting for health check (http://127.0.0.1:%d%s)...\n", targetPort, app.HealthCheckPath)
 	if err := health.WaitForHealthy(cfg.Client, targetPort, app.HealthCheckPath, healthTimeout); err != nil {
@@ -101,21 +119,21 @@ func Deploy(cfg DeployConfig) (*DeployResult, error) {
 	}
 	fmt.Println("  Health check passed")
 
-	// Step 10: Update Caddy route.
+	// Step 11: Update Caddy route.
 	fmt.Printf("  Switching traffic to %s (port %d)...\n", targetSlot, targetPort)
 	routeCfg := caddy.RouteConfig{
 		AppName:             cfg.AppName,
 		CaddyServer:         app.CaddyServer,
 		Domains:             app.Domains,
 		Port:                targetPort,
-		CaddyHandleTemplate: cfg.CaddyHandleTemplate,
+		CaddyHandleTemplate: caddyHandleTemplate,
 		SlotDir:             fmt.Sprintf("%s/slots/%s", appDir, targetSlot),
 	}
 	if err := caddy.UpdateAppRoute(cfg.Client, routeCfg); err != nil {
 		return nil, fmt.Errorf("updating Caddy route: %w", err)
 	}
 
-	// Step 11: Stop old slot (skip on first deploy).
+	// Step 12: Stop old slot (skip on first deploy).
 	if activeSlot != "" {
 		oldUnit := fmt.Sprintf("%s@%s.service", cfg.AppName, activeSlot)
 		fmt.Printf("  Stopping %s...\n", oldUnit)
@@ -124,17 +142,18 @@ func Deploy(cfg DeployConfig) (*DeployResult, error) {
 		}
 	}
 
-	// Step 12: Update verna.json.
+	// Step 13: Update verna.json.
 	slot := app.Slots[targetSlot]
 	slot.Release = cfg.ReleaseID
 	slot.DeployedAt = time.Now().UTC().Format(time.RFC3339)
+	slot.CaddyHandleTemplate = caddyHandleTemplate
 	app.Slots[targetSlot] = slot
 	app.ActiveSlot = targetSlot
 	if err := server.WriteState(cfg.Client, cfg.RootDir, cfg.State); err != nil {
 		fmt.Printf("  Warning: failed to write state: %v\n", err)
 	}
 
-	// Step 13: Prune old releases.
+	// Step 14: Prune old releases.
 	pruned, err := pruneReleases(cfg.Client, cfg.RootDir, cfg.AppName, app)
 	if err != nil {
 		fmt.Printf("  Warning: prune failed: %v\n", err)

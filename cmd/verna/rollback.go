@@ -87,7 +87,7 @@ func newRollbackCmd() *cobra.Command {
 				CaddyServer:         app.CaddyServer,
 				Domains:             app.Domains,
 				Port:                target.Port,
-				CaddyHandleTemplate: app.CaddyHandleTemplate,
+				CaddyHandleTemplate: app.EffectiveCaddyHandleTemplate(targetSlot),
 				SlotDir:             fmt.Sprintf("%s/slots/%s", appDir, targetSlot),
 			}
 			if err := caddy.UpdateAppRoute(client, routeCfg); err != nil {

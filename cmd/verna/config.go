@@ -44,7 +44,7 @@ func newConfigListCmd() *cobra.Command {
 
 			printSetting("domains", strings.Join(app.Domains, ", "))
 			printSetting("exec-path", app.ExecPath)
-			printSetting("caddy-handle-template", app.CaddyHandleTemplate)
+			printSetting("caddy-handle-template-path", app.CaddyHandleTemplatePath)
 			printSetting("health-check-path", app.HealthCheckPath)
 			printSetting("health-check-timeout", fmt.Sprintf("%d", app.HealthCheckTimeout))
 			printSetting("release-retention", fmt.Sprintf("%d", app.ReleaseRetention))
@@ -89,8 +89,8 @@ func newConfigGetCmd() *cobra.Command {
 				fmt.Println(strings.Join(app.Domains, ", "))
 			case "exec-path":
 				fmt.Println(app.ExecPath)
-			case "caddy-handle-template":
-				fmt.Println(app.CaddyHandleTemplate)
+			case "caddy-handle-template-path":
+				fmt.Println(app.CaddyHandleTemplatePath)
 			case "health-check-path":
 				fmt.Println(app.HealthCheckPath)
 			case "health-check-timeout":
@@ -102,7 +102,7 @@ func newConfigGetCmd() *cobra.Command {
 			case "caddy-server":
 				fmt.Println(app.CaddyServer)
 			default:
-				return fmt.Errorf("unknown config key %q (valid keys: domains, exec-path, caddy-handle-template, health-check-path, health-check-timeout, release-retention, exec-args, caddy-server)", key)
+				return fmt.Errorf("unknown config key %q (valid keys: domains, exec-path, caddy-handle-template-path, health-check-path, health-check-timeout, release-retention, exec-args, caddy-server)", key)
 			}
 
 			return nil

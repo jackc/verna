@@ -11,19 +11,19 @@ import (
 
 func newConfigSetCmd() *cobra.Command {
 	var (
-		domains            []string
-		execPath           string
-		caddyHandleTemplate string
-		healthCheckPath    string
-		healthCheckTimeout int
-		releaseRetention   int
-		execArgs           []string
+		domains                []string
+		execPath               string
+		caddyHandleTemplatePath string
+		healthCheckPath        string
+		healthCheckTimeout     int
+		releaseRetention       int
+		execArgs               []string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "set",
 		Short: "Update application settings",
-		Long:  "Updates app configuration in verna.json. Changes to --domain or --caddy-handle-template update the Caddy route. Changes to --exec-path or --exec-arg regenerate the systemd unit and restart the active slot.",
+		Long:  "Updates app configuration in verna.json. Changes to --domain update the Caddy route. Changes to --exec-path or --exec-arg regenerate the systemd unit and restart the active slot.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appName, err := requireApp()
@@ -33,11 +33,11 @@ func newConfigSetCmd() *cobra.Command {
 
 			// Check that at least one flag was provided.
 			flags := cmd.Flags()
-			if !flags.Changed("domain") && !flags.Changed("exec-path") && !flags.Changed("caddy-handle-template") &&
+			if !flags.Changed("domain") && !flags.Changed("exec-path") && !flags.Changed("caddy-handle-template-path") &&
 				!flags.Changed("health-check-path") &&
 				!flags.Changed("health-check-timeout") && !flags.Changed("release-retention") &&
 				!flags.Changed("exec-arg") {
-				return fmt.Errorf("no settings to update (use --domain, --exec-path, --caddy-handle-template, --health-check-path, --health-check-timeout, --release-retention, or --exec-arg)")
+				return fmt.Errorf("no settings to update (use --domain, --exec-path, --caddy-handle-template-path, --health-check-path, --health-check-timeout, --release-retention, or --exec-arg)")
 			}
 
 			client, err := connectToServer()
@@ -75,20 +75,9 @@ func newConfigSetCmd() *cobra.Command {
 				fmt.Printf("  Exec path: %s\n", execPath)
 			}
 
-			if flags.Changed("caddy-handle-template") {
-				if caddyHandleTemplate != "" {
-					var err error
-					caddyHandleTemplate, err = resolveHandleTemplate(caddyHandleTemplate)
-					if err != nil {
-						return err
-					}
-					if err := caddy.ValidateHandleTemplate(caddyHandleTemplate); err != nil {
-						return fmt.Errorf("invalid caddy handle template: %w", err)
-					}
-				}
-				app.CaddyHandleTemplate = caddyHandleTemplate
-				needCaddyUpdate = true
-				fmt.Printf("  Caddy handle template: %s\n", caddyHandleTemplate)
+			if flags.Changed("caddy-handle-template-path") {
+				app.CaddyHandleTemplatePath = caddyHandleTemplatePath
+				fmt.Printf("  Caddy handle template path: %s\n", caddyHandleTemplatePath)
 			}
 
 			if flags.Changed("health-check-path") {
@@ -112,7 +101,7 @@ func newConfigSetCmd() *cobra.Command {
 				fmt.Printf("  Exec args: %v\n", execArgs)
 			}
 
-			// Update Caddy route if domains or caddy-handle-template changed.
+			// Update Caddy route if domains changed.
 			if needCaddyUpdate {
 				fmt.Println("Updating Caddy route...")
 				activeSlot := app.ActiveSlot
@@ -120,12 +109,16 @@ func newConfigSetCmd() *cobra.Command {
 					activeSlot = "blue"
 				}
 				activePort := app.Slots[activeSlot].Port
+				handleTemplate := app.EffectiveCaddyHandleTemplate(activeSlot)
+				if handleTemplate == "" {
+					handleTemplate = caddy.DefaultHandleTemplate
+				}
 				if err := caddy.UpdateAppRoute(client, caddy.RouteConfig{
 					AppName:             appName,
 					CaddyServer:         app.CaddyServer,
 					Domains:             app.Domains,
 					Port:                activePort,
-					CaddyHandleTemplate: app.CaddyHandleTemplate,
+					CaddyHandleTemplate: handleTemplate,
 					SlotDir:             fmt.Sprintf("%s/apps/%s/slots/%s", defaultRootDir, appName, activeSlot),
 				}); err != nil {
 					return fmt.Errorf("updating Caddy route: %w", err)
@@ -179,7 +172,7 @@ func newConfigSetCmd() *cobra.Command {
 
 	cmd.Flags().StringArrayVar(&domains, "domain", nil, "domain name for the app (repeatable, replaces all existing domains)")
 	cmd.Flags().StringVar(&execPath, "exec-path", "", "relative path to executable in artifact directory")
-	cmd.Flags().StringVar(&caddyHandleTemplate, "caddy-handle-template", "", "Caddy route handle: preset name (proxy, static-proxy, spa-proxy), @file path, or Go text/template JSON (uses {{.Dial}} and {{.SlotDir}})")
+	cmd.Flags().StringVar(&caddyHandleTemplatePath, "caddy-handle-template-path", "", "path within the artifact where the Caddy handle template is stored")
 	cmd.Flags().StringVar(&healthCheckPath, "health-check-path", "", "health check endpoint path")
 	cmd.Flags().IntVar(&healthCheckTimeout, "health-check-timeout", 0, "health check timeout in seconds")
 	cmd.Flags().IntVar(&releaseRetention, "release-retention", 0, "number of releases to retain")

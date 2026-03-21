@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strings"
@@ -88,28 +89,64 @@ func main() {
 	}
 }
 
-// resolveFileArg checks if val starts with "@" and, if so, reads the file at
-// the remaining path and returns its contents. Otherwise returns val as-is.
-func resolveFileArg(val string) (string, error) {
-	if !strings.HasPrefix(val, "@") {
-		return val, nil
+// ensureCaddyHandleTemplateFile checks if the caddy handle template file exists
+// at the given path. If it doesn't, it interactively offers to create it from a
+// preset. Returns the validated template content.
+func ensureCaddyHandleTemplateFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err == nil {
+		// File exists — validate and return.
+		tmpl := strings.TrimRight(string(data), "\n")
+		if err := caddy.ValidateHandleTemplate(tmpl); err != nil {
+			return "", fmt.Errorf("invalid caddy handle template in %s: %w", path, err)
+		}
+		fmt.Printf("Using caddy handle template from %s\n", path)
+		return tmpl, nil
 	}
-	data, err := os.ReadFile(val[1:])
-	if err != nil {
-		return "", fmt.Errorf("reading file %s: %w", val[1:], err)
-	}
-	return strings.TrimRight(string(data), "\n"), nil
-}
 
-// resolveHandleTemplate resolves a caddy handle template value: preset name,
-// @file path, or literal template string. The expanded template is returned
-// so it can be stored in verna.json (presets are resolved at set time, not
-// at render time).
-func resolveHandleTemplate(val string) (string, error) {
-	if expanded, ok := caddy.ResolvePreset(val); ok {
-		return expanded, nil
+	if !os.IsNotExist(err) {
+		return "", fmt.Errorf("reading caddy handle template %s: %w", path, err)
 	}
-	return resolveFileArg(val)
+
+	// File doesn't exist — offer to create from a preset.
+	fmt.Printf("Caddy handle template not found at %s\n", path)
+	fmt.Println("Available presets:")
+	presetNames := caddy.PresetNames()
+	for i, name := range presetNames {
+		fmt.Printf("  %d) %s\n", i+1, name)
+	}
+	fmt.Print("\nSelect a preset [1]: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	answer, _ := reader.ReadString('\n')
+	answer = strings.TrimSpace(answer)
+
+	choice := 0
+	if answer == "" {
+		choice = 1
+	} else {
+		if _, err := fmt.Sscanf(answer, "%d", &choice); err != nil || choice < 1 || choice > len(presetNames) {
+			return "", fmt.Errorf("invalid selection %q", answer)
+		}
+	}
+
+	selectedPreset := presetNames[choice-1]
+	tmpl, _ := caddy.ResolvePreset(selectedPreset)
+
+	// Create parent directories and write the file.
+	dir := path
+	if lastSlash := strings.LastIndex(dir, "/"); lastSlash >= 0 {
+		dir = dir[:lastSlash]
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return "", fmt.Errorf("creating directory %s: %w", dir, err)
+		}
+	}
+	if err := os.WriteFile(path, []byte(tmpl+"\n"), 0o644); err != nil {
+		return "", fmt.Errorf("writing caddy handle template %s: %w", path, err)
+	}
+
+	fmt.Printf("Wrote %s preset to %s\n", selectedPreset, path)
+	return tmpl, nil
 }
 
 func applyEnvDefaults(cmd *cobra.Command) {

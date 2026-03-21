@@ -103,12 +103,18 @@ Creates the directory structure, system user, systemd template unit, and Caddy r
 
 Options:
 - `--exec-path` (required) — relative path to the executable within the artifact directory (e.g. `bin/myapp`)
-- `--caddy-handle-template` — Caddy route handle configuration (default: `proxy`). Accepts a preset name, `@file` path, or inline Go text/template JSON (uses `{{.Dial}}` and `{{.SlotDir}}`)
+- `--caddy-handle-template-path` — path within the artifact where the Caddy handle template is stored (default: `deploy/caddy-handle-template.json`)
 - `--domain` (required, repeatable) — domain name(s) for the app
 - `--health-check-path` — health check endpoint path (default: `/health`)
 - `--exec-arg` — arguments appended to the executable in ExecStart (repeatable)
 
-#### Caddy handle template presets
+#### Caddy handle template
+
+The Caddy handle template is a Go `text/template` producing a JSON array of Caddy handlers, stored as a file in your project and included in the deploy artifact. During `app init`, if the template file doesn't exist at the configured path, you'll be prompted to create one from a preset.
+
+Template variables: `{{.Dial}}` (e.g. `127.0.0.1:18001`) and `{{.SlotDir}}` (e.g. `/var/lib/verna/apps/myapp/slots/blue`).
+
+**Available presets:**
 
 | Preset | Description |
 |--------|-------------|
@@ -116,13 +122,7 @@ Options:
 | `static-proxy` | Try static files from `public/` first, fall back to reverse proxy. Includes precompressed file support (gzip, zstd, brotli). |
 | `spa-proxy` | SPA with reverse-proxied API. Serves `/assets/*` with immutable cache headers, proxies `/api/*` to the backend, and falls back to `index.html` for client-side routing. For SvelteKit (adapter-static) or similar SPA frameworks. |
 
-For custom routing, pass a Go `text/template` that produces a JSON array of Caddy handlers. Use `@file` to read from a file:
-
-```sh
-verna app --app myapp init --caddy-handle-template @caddy-handle.json.tmpl ...
-```
-
-Template variables: `{{.Dial}}` (e.g. `127.0.0.1:18001`) and `{{.SlotDir}}` (e.g. `/var/lib/verna/apps/myapp/slots/blue`).
+Each deploy reads the template from the artifact, so different versions of your app can have different Caddy routing. Rollback restores the previous deployment's routing configuration.
 
 ### Manage app configuration
 
@@ -165,7 +165,7 @@ tar czf myapp.tar.gz -C dist .
 verna --ssh-host myserver app --app myapp deploy myapp.tar.gz
 ```
 
-The deploy command takes a `.tar.gz` file as its argument. The build system (goreleaser, Makefile, CI script, etc.) is responsible for producing the tarball. Verna uploads it to the server, unpacks it, and validates that the executable exists. The binary path is configured as an app-level setting (see `app init` above). Caddy routing behavior is controlled via `--caddy-handle-template`.
+The deploy command takes a `.tar.gz` file as its argument. The build system (goreleaser, Makefile, CI script, etc.) is responsible for producing the tarball. Verna uploads it to the server, unpacks it, and validates that the executable exists. The binary path is configured as an app-level setting (see `app init` above). The Caddy handle template is read from the artifact at the configured path (see `app init`), so each deploy can have its own routing configuration.
 
 Old releases beyond the retention limit (default 5) are automatically pruned after each successful deploy.
 
@@ -254,7 +254,7 @@ Releases are immutable. Slots are symlinks. Rollback is a symlink swap.
 
 ## Artifact format
 
-Artifacts are `.tar.gz` files produced by your build system. There is no specific format. The app `--exec-path` and `--caddy-handle-template` control what executable is run and what assets to serve.
+Artifacts are `.tar.gz` files produced by your build system. There is no specific format. The app `--exec-path` controls what executable is run. The Caddy handle template file (default at `deploy/caddy-handle-template.json` within the artifact) controls routing behavior.
 
 Release IDs are generated automatically from the deploy timestamp and a SHA-256 hash prefix of the tarball contents (e.g. `20260307T120102Z-a1b2c3d4e5f6`).
 

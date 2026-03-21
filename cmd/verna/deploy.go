@@ -63,13 +63,13 @@ func newDeployCmd() *cobra.Command {
 
 			fmt.Printf("Deploying %s (release %s)...\n", appName, releaseID)
 			result, err := deploy.Deploy(deploy.DeployConfig{
-				Client:        client,
-				RootDir:       defaultRootDir,
-				AppName:       appName,
-				State:         state,
-				TarballReader: f,
-				ReleaseID:     releaseID,
-				CaddyHandleTemplate: app.CaddyHandleTemplate,
+				Client:                  client,
+				RootDir:                 defaultRootDir,
+				AppName:                 appName,
+				State:                   state,
+				TarballReader:           f,
+				ReleaseID:               releaseID,
+				CaddyHandleTemplatePath: app.CaddyHandleTemplatePath,
 			})
 			if err != nil {
 				return fmt.Errorf("deploy failed: %w", err)

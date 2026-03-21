@@ -90,16 +90,18 @@ func requireApp() (string, error) {
 	return flagApp, nil
 }
 
+const defaultCaddyHandleTemplatePath = "deploy/caddy-handle-template.json"
+
 func newAppInitCmd() *cobra.Command {
 	var (
-		domains            []string
-		execPath           string
-		caddyHandleTemplate string
-		healthCheckPath    string
-		healthCheckTimeout int
-		releaseRetention   int
-		execArgs           []string
-		caddyServer        string
+		domains                []string
+		execPath               string
+		caddyHandleTemplatePath string
+		healthCheckPath        string
+		healthCheckTimeout     int
+		releaseRetention       int
+		execArgs               []string
+		caddyServer            string
 	)
 
 	cmd := &cobra.Command{
@@ -203,15 +205,10 @@ func newAppInitCmd() *cobra.Command {
 				return fmt.Errorf("reloading systemd: %w", err)
 			}
 
-			// Resolve and validate caddy handle template.
-			if caddyHandleTemplate != "" {
-				caddyHandleTemplate, err = resolveHandleTemplate(caddyHandleTemplate)
-				if err != nil {
-					return err
-				}
-				if err := caddy.ValidateHandleTemplate(caddyHandleTemplate); err != nil {
-					return fmt.Errorf("invalid caddy handle template: %w", err)
-				}
+			// Ensure caddy handle template file exists locally.
+			caddyHandleTemplate, err := ensureCaddyHandleTemplateFile(caddyHandleTemplatePath)
+			if err != nil {
+				return err
 			}
 
 			// Configure Caddy route.
@@ -235,17 +232,17 @@ func newAppInitCmd() *cobra.Command {
 
 			// Register app in state.
 			state.Apps[appName] = &server.AppState{
-				Domains:            domains,
-				ExecPath:           execPath,
-				CaddyHandleTemplate: caddyHandleTemplate,
-				HealthCheckPath:    healthCheckPath,
-				HealthCheckTimeout: healthCheckTimeout,
-				ReleaseRetention:   releaseRetention,
-				User:               systemUser,
-				Group:              systemUser,
-				ExecArgs:           execArgs,
-				CaddyServer:        serverName,
-				ActiveSlot:         "",
+				Domains:                domains,
+				ExecPath:               execPath,
+				CaddyHandleTemplatePath: caddyHandleTemplatePath,
+				HealthCheckPath:        healthCheckPath,
+				HealthCheckTimeout:     healthCheckTimeout,
+				ReleaseRetention:       releaseRetention,
+				User:                   systemUser,
+				Group:                  systemUser,
+				ExecArgs:               execArgs,
+				CaddyServer:            serverName,
+				ActiveSlot:             "",
 				Slots: map[string]server.SlotState{
 					"blue":  {Port: bluePort},
 					"green": {Port: greenPort},
@@ -269,7 +266,7 @@ func newAppInitCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&domains, "domain", nil, "domain name for the app (repeatable, at least one required)")
 	cmd.Flags().StringVar(&execPath, "exec-path", "", "relative path to executable in artifact directory (e.g. bin/myapp)")
 	cmd.MarkFlagRequired("exec-path")
-	cmd.Flags().StringVar(&caddyHandleTemplate, "caddy-handle-template", "proxy", "Caddy route handle: preset name (proxy, static-proxy, spa-proxy), @file path, or Go text/template JSON (uses {{.Dial}} and {{.SlotDir}})")
+	cmd.Flags().StringVar(&caddyHandleTemplatePath, "caddy-handle-template-path", defaultCaddyHandleTemplatePath, "path within the artifact where the Caddy handle template is stored")
 	cmd.Flags().StringVar(&healthCheckPath, "health-check-path", "/health", "health check endpoint path")
 	cmd.Flags().IntVar(&healthCheckTimeout, "health-check-timeout", 15, "health check timeout in seconds")
 	cmd.Flags().IntVar(&releaseRetention, "release-retention", 5, "number of releases to retain")
