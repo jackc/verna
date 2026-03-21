@@ -90,6 +90,14 @@ func WriteState(client *ssh.Client, rootDir string, state *ServerState) error {
 	}
 
 	path := rootDir + "/verna.json"
+
+	// Backup current state file (ignore errors if file doesn't exist yet).
+	backupPath := path + ".bak." + fmt.Sprintf("%d", time.Now().UnixNano())
+	client.Run(fmt.Sprintf("cp %q %q 2>/dev/null", path, backupPath))
+
+	// Prune old backups, keeping only the most recent 10.
+	client.Run(fmt.Sprintf("ls -1t %q.bak.* 2>/dev/null | tail -n +11 | xargs -r rm --", path))
+
 	tmpPath := path + ".tmp." + fmt.Sprintf("%d", time.Now().UnixNano())
 
 	// Write to temp file, then atomically rename.
