@@ -31,7 +31,7 @@ Type=simple
 User={{.User}}
 Group={{.Group}}
 WorkingDirectory={{.RootDir}}/apps/{{.AppName}}/slots/%i
-EnvironmentFile=-{{.RootDir}}/apps/{{.AppName}}/slots/%i/env/runtime.env
+EnvironmentFile=-{{.RootDir}}/apps/{{.AppName}}/slots/%i/.verna/env/runtime.env
 ExecStart={{.RootDir}}/apps/{{.AppName}}/slots/%i/{{.ExecPath}}{{.ExecArgsSuffix}}
 Environment=VERNA_APP={{.AppName}}
 Environment=VERNA_SLOT=%i

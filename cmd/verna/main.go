@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/user"
 	"strings"
 
 	"github.com/jackc/verna/internal/caddy"
+	"github.com/jackc/verna/internal/server"
 	"github.com/spf13/cobra"
 )
 
@@ -149,6 +151,17 @@ func ensureCaddyHandleTemplateFile(path string) (string, error) {
 	return tmpl, nil
 }
 
+func newStateMetadata() server.StateMetadata {
+	username := "unknown"
+	if u, err := user.Current(); err == nil {
+		username = u.Username
+	}
+	return server.StateMetadata{
+		Verna:    version,
+		Username: username,
+	}
+}
+
 func applyEnvDefaults(cmd *cobra.Command) {
 	envFlags := []struct {
 		flag   string
@@ -159,6 +172,7 @@ func applyEnvDefaults(cmd *cobra.Command) {
 		{"ssh-port", "VERNA_SSH_PORT"},
 		{"ssh-key-file", "VERNA_SSH_KEY_FILE"},
 		{"app", "VERNA_APP"},
+		{"caddy-handle-template-path", "VERNA_CADDY_HANDLE_TEMPLATE_PATH"},
 	}
 
 	for _, ef := range envFlags {

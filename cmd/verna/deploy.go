@@ -11,6 +11,8 @@ import (
 )
 
 func newDeployCmd() *cobra.Command {
+	var caddyHandleTemplatePath string
+
 	cmd := &cobra.Command{
 		Use:   "deploy <tarball>",
 		Short: "Deploy an application to the server",
@@ -32,6 +34,12 @@ func newDeployCmd() *cobra.Command {
 				return err
 			}
 
+			// Read and validate caddy handle template locally.
+			caddyHandleTemplate, err := ensureCaddyHandleTemplateFile(caddyHandleTemplatePath)
+			if err != nil {
+				return err
+			}
+
 			// Generate release ID from timestamp + tarball content hash.
 			releaseID, err := deploy.GenerateReleaseID(time.Now(), tarballPath)
 			if err != nil {
@@ -49,8 +57,7 @@ func newDeployCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("reading server state: %w", err)
 			}
-			app, exists := state.Apps[appName]
-			if !exists {
+			if _, exists := state.Apps[appName]; !exists {
 				return fmt.Errorf("app %q not found (run `verna app init` first)", appName)
 			}
 
@@ -63,13 +70,14 @@ func newDeployCmd() *cobra.Command {
 
 			fmt.Printf("Deploying %s (release %s)...\n", appName, releaseID)
 			result, err := deploy.Deploy(deploy.DeployConfig{
-				Client:                  client,
-				RootDir:                 defaultRootDir,
-				AppName:                 appName,
-				State:                   state,
-				TarballReader:           f,
-				ReleaseID:               releaseID,
-				CaddyHandleTemplatePath: app.CaddyHandleTemplatePath,
+				Client:              client,
+				RootDir:             defaultRootDir,
+				AppName:             appName,
+				State:               state,
+				TarballReader:       f,
+				ReleaseID:           releaseID,
+				CaddyHandleTemplate: caddyHandleTemplate,
+				Meta:                newStateMetadata(),
 			})
 			if err != nil {
 				return fmt.Errorf("deploy failed: %w", err)
@@ -85,6 +93,8 @@ func newDeployCmd() *cobra.Command {
 			return nil
 		},
 	}
+
+	cmd.Flags().StringVar(&caddyHandleTemplatePath, "caddy-handle-template-path", defaultCaddyHandleTemplatePath, "local path to the Caddy handle template file")
 
 	return cmd
 }

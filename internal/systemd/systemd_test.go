@@ -27,7 +27,7 @@ func TestGenerateTemplateUnit(t *testing.T) {
 		{"user", "User=myapp"},
 		{"group", "Group=myapp"},
 		{"working dir", "WorkingDirectory=/var/lib/verna/apps/myapp/slots/%i"},
-		{"env file", "EnvironmentFile=-/var/lib/verna/apps/myapp/slots/%i/env/runtime.env"},
+		{"env file", "EnvironmentFile=-/var/lib/verna/apps/myapp/slots/%i/.verna/env/runtime.env"},
 		{"exec start", "ExecStart=/var/lib/verna/apps/myapp/slots/%i/bin/myapp"},
 		{"verna app env", "Environment=VERNA_APP=myapp"},
 		{"verna slot env", "Environment=VERNA_SLOT=%i"},

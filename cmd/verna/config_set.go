@@ -11,13 +11,12 @@ import (
 
 func newConfigSetCmd() *cobra.Command {
 	var (
-		domains                []string
-		execPath               string
-		caddyHandleTemplatePath string
-		healthCheckPath        string
-		healthCheckTimeout     int
-		releaseRetention       int
-		execArgs               []string
+		domains            []string
+		execPath           string
+		healthCheckPath    string
+		healthCheckTimeout int
+		releaseRetention   int
+		execArgs           []string
 	)
 
 	cmd := &cobra.Command{
@@ -33,11 +32,11 @@ func newConfigSetCmd() *cobra.Command {
 
 			// Check that at least one flag was provided.
 			flags := cmd.Flags()
-			if !flags.Changed("domain") && !flags.Changed("exec-path") && !flags.Changed("caddy-handle-template-path") &&
+			if !flags.Changed("domain") && !flags.Changed("exec-path") &&
 				!flags.Changed("health-check-path") &&
 				!flags.Changed("health-check-timeout") && !flags.Changed("release-retention") &&
 				!flags.Changed("exec-arg") {
-				return fmt.Errorf("no settings to update (use --domain, --exec-path, --caddy-handle-template-path, --health-check-path, --health-check-timeout, --release-retention, or --exec-arg)")
+				return fmt.Errorf("no settings to update (use --domain, --exec-path, --health-check-path, --health-check-timeout, --release-retention, or --exec-arg)")
 			}
 
 			client, err := connectToServer()
@@ -73,11 +72,6 @@ func newConfigSetCmd() *cobra.Command {
 				app.ExecPath = execPath
 				needSystemdUpdate = true
 				fmt.Printf("  Exec path: %s\n", execPath)
-			}
-
-			if flags.Changed("caddy-handle-template-path") {
-				app.CaddyHandleTemplatePath = caddyHandleTemplatePath
-				fmt.Printf("  Caddy handle template path: %s\n", caddyHandleTemplatePath)
 			}
 
 			if flags.Changed("health-check-path") {
@@ -161,7 +155,7 @@ func newConfigSetCmd() *cobra.Command {
 			}
 
 			// Write updated state.
-			if err := server.WriteState(client, defaultRootDir, state); err != nil {
+			if err := server.WriteState(client, defaultRootDir, state, newStateMetadata()); err != nil {
 				return fmt.Errorf("writing server state: %w", err)
 			}
 
@@ -172,7 +166,6 @@ func newConfigSetCmd() *cobra.Command {
 
 	cmd.Flags().StringArrayVar(&domains, "domain", nil, "domain name for the app (repeatable, replaces all existing domains)")
 	cmd.Flags().StringVar(&execPath, "exec-path", "", "relative path to executable in artifact directory")
-	cmd.Flags().StringVar(&caddyHandleTemplatePath, "caddy-handle-template-path", "", "path within the artifact where the Caddy handle template is stored")
 	cmd.Flags().StringVar(&healthCheckPath, "health-check-path", "", "health check endpoint path")
 	cmd.Flags().IntVar(&healthCheckTimeout, "health-check-timeout", 0, "health check timeout in seconds")
 	cmd.Flags().IntVar(&releaseRetention, "release-retention", 0, "number of releases to retain")

@@ -103,7 +103,7 @@ func newRollbackCmd() *cobra.Command {
 
 			// Update state.
 			app.ActiveSlot = targetSlot
-			if err := server.WriteState(client, defaultRootDir, state); err != nil {
+			if err := server.WriteState(client, defaultRootDir, state, newStateMetadata()); err != nil {
 				fmt.Printf("  Warning: failed to write state: %v\n", err)
 			}
 

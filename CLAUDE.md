@@ -29,10 +29,18 @@ All server operations use `golang.org/x/crypto/ssh`. File uploads stream tarball
 Each app has two slots (blue/green) with auto-assigned ports. Slots are symlinks under `/var/lib/verna/apps/<app>/slots/` pointing to immutable release directories under `releases/`. Rollback is a symlink swap + service restart.
 
 ### Artifact tarball
-The deploy command takes a pre-built `.tar.gz` file as its argument. The build system (goreleaser, Makefile, CI script, etc.) is responsible for producing the tarball. Verna uploads it to the server and unpacks it. The executable path is configured as an app-level setting (`--exec-path` on `app init`/`app config set`) and is a relative path within the tarball. After unpacking, Verna validates that the executable exists and is executable on the server. Caddy routing is controlled via a handle template file included in the artifact at a configurable path (`--caddy-handle-template-path`, default `deploy/caddy-handle-template.json`). The template is a Go `text/template` producing the JSON `handle` array with `{{.Dial}}` and `{{.SlotDir}}` variables. During `app init`, if the template file doesn't exist locally, the user is prompted to create one from a preset (proxy, static-proxy, spa-proxy). Each deploy reads the template from the artifact and stores it per-slot, so rollback restores the previous deployment's routing config.
+The deploy command takes a pre-built `.tar.gz` file as its argument. The build system (goreleaser, Makefile, CI script, etc.) is responsible for producing the tarball. Verna uploads it to the server and unpacks it. The executable path is configured as an app-level setting (`--exec-path` on `app init`/`app config set`) and is a relative path within the tarball. After unpacking, Verna validates that the executable exists and is executable on the server.
+
+### Caddy handle template
+Caddy routing is controlled via a handle template file read locally by the verna client during deploy (`--caddy-handle-template-path` flag on `deploy`, default `deploy/caddy-handle-template.json`, env `VERNA_CADDY_HANDLE_TEMPLATE_PATH`). The template is a Go `text/template` producing the JSON `handle` array with `{{.Dial}}` and `{{.SlotDir}}` variables. If the template file doesn't exist locally, the user is prompted to create one from a preset (proxy, static-proxy, spa-proxy). Each deploy writes the template to `.verna/caddy-handle-template.json` in the release directory and stores it per-slot in `verna.json`, so rollback restores the previous deployment's routing config.
+
+### `.verna` directory
+Verna-managed files within a release/slot directory are stored under a `.verna/` subdirectory to avoid name collisions with artifact contents. This includes:
+- `.verna/env/runtime.env` — systemd EnvironmentFile with PORT and user-defined env vars
+- `.verna/caddy-handle-template.json` — the Caddy handle template used for this deployment
 
 ### Deploy state machine
-The deploy targets the inactive slot: upload tarball, unpack to release dir, update symlink, write env file, restart systemd unit, health check, then atomically switch Caddy's upstream via its admin API (localhost:2019). If anything fails before the Caddy switch, the old slot stays live.
+The deploy targets the inactive slot: upload tarball, unpack to release dir, update symlink, write caddy template and env file to `.verna/`, restart systemd unit, health check, then atomically switch Caddy's upstream via its admin API (localhost:2019). If anything fails before the Caddy switch, the old slot stays live.
 
 ### CLI
 Built with `github.com/spf13/cobra`. Commands: `server init`, `app init`, `app config {list,set}`, `app env {list,get,set,unset}`, `deploy`, `status`, `rollback`, `logs`, `prune`.

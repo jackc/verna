@@ -10,15 +10,20 @@ import (
 
 const DefaultStartPort = 18001
 
+type StateMetadata struct {
+	Verna    string `json:"verna"`
+	Username string `json:"username"`
+}
+
 type ServerState struct {
-	NextPort int                  `json:"next_port"`
-	Apps     map[string]*AppState `json:"apps"`
+	LastModifiedBy *StateMetadata       `json:"last_modified_by,omitempty"`
+	NextPort       int                  `json:"next_port"`
+	Apps           map[string]*AppState `json:"apps"`
 }
 
 type AppState struct {
 	Domains                []string            `json:"domains"`
 	ExecPath               string              `json:"exec_path"`
-	CaddyHandleTemplatePath string             `json:"caddy_handle_template_path,omitempty"`
 	HealthCheckPath        string              `json:"health_check_path"`
 	HealthCheckTimeout     int                 `json:"health_check_timeout"`
 	ReleaseRetention       int                 `json:"release_retention"`
@@ -83,7 +88,8 @@ func ReadState(client *ssh.Client, rootDir string) (*ServerState, error) {
 	return Parse([]byte(output))
 }
 
-func WriteState(client *ssh.Client, rootDir string, state *ServerState) error {
+func WriteState(client *ssh.Client, rootDir string, state *ServerState, meta StateMetadata) error {
+	state.LastModifiedBy = &meta
 	data, err := Marshal(state)
 	if err != nil {
 		return err

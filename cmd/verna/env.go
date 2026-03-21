@@ -151,7 +151,7 @@ func newEnvSetCmd() *cobra.Command {
 				fmt.Printf("Set %s\n", k)
 			}
 
-			if err := server.WriteState(client, defaultRootDir, state); err != nil {
+			if err := server.WriteState(client, defaultRootDir, state, newStateMetadata()); err != nil {
 				return fmt.Errorf("writing server state: %w", err)
 			}
 
@@ -204,7 +204,7 @@ func newEnvUnsetCmd() *cobra.Command {
 				}
 			}
 
-			if err := server.WriteState(client, defaultRootDir, state); err != nil {
+			if err := server.WriteState(client, defaultRootDir, state, newStateMetadata()); err != nil {
 				return fmt.Errorf("writing server state: %w", err)
 			}
 

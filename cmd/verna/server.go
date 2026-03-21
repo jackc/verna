@@ -99,7 +99,7 @@ func newServerInitCmd() *cobra.Command {
 
 			// Write empty state file.
 			state := server.NewServerState()
-			if err := server.WriteState(client, defaultRootDir, state); err != nil {
+			if err := server.WriteState(client, defaultRootDir, state, newStateMetadata()); err != nil {
 				return fmt.Errorf("writing initial state: %w", err)
 			}
 

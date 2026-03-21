@@ -47,7 +47,7 @@ func needsQuoting(s string) bool {
 // WriteRuntimeEnv writes the runtime.env file for a given app and slot.
 // It creates the env/ directory inside the slot path if needed.
 func WriteRuntimeEnv(client *ssh.Client, rootDir, appName, slot string, port int, envVars map[string]string) error {
-	envDir := fmt.Sprintf("%s/apps/%s/slots/%s/env", rootDir, appName, slot)
+	envDir := fmt.Sprintf("%s/apps/%s/slots/%s/.verna/env", rootDir, appName, slot)
 
 	if _, err := client.Run(fmt.Sprintf("mkdir -p %s", envDir)); err != nil {
 		return fmt.Errorf("creating env directory: %w", err)
