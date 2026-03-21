@@ -229,7 +229,8 @@ func AddAppRoute(client *ssh.Client, cfg RouteConfig) error {
 }
 
 // UpdateAppRoute atomically replaces the existing Caddy route for the app
-// using PATCH on its @id. PATCH strictly replaces an existing value in place.
+// using PATCH on its @id. If the route doesn't exist (e.g., someone manually
+// altered the Caddy config), it falls back to creating the route.
 func UpdateAppRoute(client *ssh.Client, cfg RouteConfig) error {
 	routeJSON, err := buildRouteJSON(cfg)
 	if err != nil {
@@ -249,6 +250,15 @@ func UpdateAppRoute(client *ssh.Client, cfg RouteConfig) error {
 		return fmt.Errorf("updating Caddy route for %s: %w", cfg.AppName, err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// Route was deleted from Caddy (e.g., manual config change). Recreate it.
+		fmt.Printf("  Caddy route for %s not found, recreating...\n", cfg.AppName)
+		if err := EnsureServerRoutes(client, cfg.CaddyServer); err != nil {
+			return fmt.Errorf("ensuring server routes: %w", err)
+		}
+		return AddAppRoute(client, cfg)
+	}
 
 	return checkResponse(resp, fmt.Sprintf("updating Caddy route for %s", cfg.AppName))
 }
