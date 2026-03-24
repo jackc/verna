@@ -64,8 +64,11 @@ func newRollbackCmd() *cobra.Command {
 				return fmt.Errorf("writing runtime.env: %w", err)
 			}
 
-			// Restart the target slot's systemd unit.
+			// Enable and restart the target slot's systemd unit.
 			fmt.Printf("  Starting %s...\n", targetUnit)
+			if _, err := client.Run(fmt.Sprintf("systemctl enable %s", targetUnit)); err != nil {
+				return fmt.Errorf("enabling %s: %w", targetUnit, err)
+			}
 			if _, err := client.Run(fmt.Sprintf("systemctl restart %s", targetUnit)); err != nil {
 				return fmt.Errorf("restarting %s: %w", targetUnit, err)
 			}
@@ -94,11 +97,14 @@ func newRollbackCmd() *cobra.Command {
 				return fmt.Errorf("updating Caddy route: %w", err)
 			}
 
-			// Stop the old (previously active) slot.
+			// Stop and disable the old (previously active) slot.
 			oldUnit := fmt.Sprintf("%s@%s.service", appName, app.ActiveSlot)
 			fmt.Printf("  Stopping %s...\n", oldUnit)
 			if _, err := client.Run(fmt.Sprintf("systemctl stop %s", oldUnit)); err != nil {
 				fmt.Printf("  Warning: failed to stop old slot %s: %v\n", oldUnit, err)
+			}
+			if _, err := client.Run(fmt.Sprintf("systemctl disable %s", oldUnit)); err != nil {
+				fmt.Printf("  Warning: failed to disable old slot %s: %v\n", oldUnit, err)
 			}
 
 			// Update state.

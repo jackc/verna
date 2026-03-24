@@ -92,8 +92,11 @@ func Deploy(cfg DeployConfig) (*DeployResult, error) {
 		return nil, fmt.Errorf("writing runtime.env: %w", err)
 	}
 
-	// Step 9: Restart systemd unit.
+	// Step 9: Enable and restart systemd unit.
 	fmt.Printf("  Starting %s...\n", unitName)
+	if _, err := cfg.Client.Run(fmt.Sprintf("systemctl enable %s", unitName)); err != nil {
+		return nil, fmt.Errorf("enabling %s: %w", unitName, err)
+	}
 	if _, err := cfg.Client.Run(fmt.Sprintf("systemctl restart %s", unitName)); err != nil {
 		return nil, fmt.Errorf("restarting %s: %w", unitName, err)
 	}
@@ -122,12 +125,15 @@ func Deploy(cfg DeployConfig) (*DeployResult, error) {
 		return nil, fmt.Errorf("updating Caddy route: %w", err)
 	}
 
-	// Step 12: Stop old slot (skip on first deploy).
+	// Step 12: Stop and disable old slot (skip on first deploy).
 	if activeSlot != "" {
 		oldUnit := fmt.Sprintf("%s@%s.service", cfg.AppName, activeSlot)
 		fmt.Printf("  Stopping %s...\n", oldUnit)
 		if _, err := cfg.Client.Run(fmt.Sprintf("systemctl stop %s", oldUnit)); err != nil {
 			fmt.Printf("  Warning: failed to stop old slot %s: %v\n", oldUnit, err)
+		}
+		if _, err := cfg.Client.Run(fmt.Sprintf("systemctl disable %s", oldUnit)); err != nil {
+			fmt.Printf("  Warning: failed to disable old slot %s: %v\n", oldUnit, err)
 		}
 	}
 
