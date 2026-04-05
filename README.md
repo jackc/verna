@@ -281,6 +281,74 @@ verna --ssh-host myserver app --app myapp deploy myapp.tar.gz
 - **Pre-built tarballs** — build system produces `.tar.gz`; Verna uploads, unpacks, and validates
 - **Immutable releases** — rollback is a symlink swap + service restart
 
+## Testing
+
+Unit tests run without any special setup:
+
+```sh
+go test ./...
+```
+
+### Integration tests
+
+Integration tests connect to a real server over SSH and exercise the full verna workflow: server init, Caddy install, app lifecycle, deploy, rollback, and cleanup. The test server must be a **fresh Ubuntu 24.04** machine — the tests install Caddy, create systemd units, and manage system users.
+
+#### Test server setup
+
+1. Create a marker file on the server so the tests know it's safe to use. Without this file, tests will abort to avoid accidentally damaging another host:
+
+    ```sh
+    # On the test server (as root):
+    touch /verna-integration-test-target
+    ```
+
+2. Ensure root SSH access from the machine running the tests. If you don't already have a key:
+
+    ```sh
+    ssh-keygen -t ed25519 -f ~/.ssh/verna-test -N ""
+    ssh-copy-id -i ~/.ssh/verna-test root@<test-server-ip>
+    ```
+
+#### Running the integration tests
+
+If your SSH agent already has a key for the test server:
+
+```sh
+VERNA_TEST_SSH_HOST=<ip> go test -v -timeout 300s ./integration_test/
+```
+
+Or with an explicit key file:
+
+```sh
+VERNA_TEST_SSH_HOST=<ip> VERNA_TEST_SSH_KEY_FILE=~/.ssh/verna-test go test -v -timeout 300s ./integration_test/
+```
+
+Environment variables:
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `VERNA_TEST_SSH_HOST` | Yes | — | Test server IP or hostname |
+| `VERNA_TEST_SSH_PORT` | No | `22` | SSH port |
+| `VERNA_TEST_SSH_KEY_FILE` | No | — | Path to SSH private key (falls back to SSH agent) |
+| `VERNA_TEST_GOARCH` | No | `amd64` | Architecture for cross-compiling the test app binary |
+
+The tests clean up all verna files when done and return the server to its original state.
+
+#### SSH from a devcontainer
+
+If you're developing inside a devcontainer that cannot directly reach the test server, you can use `socat` on the host to relay the SSH connection. For example, if the test server is at `192.168.1.100` and your devcontainer maps port 2222:
+
+```sh
+# On the host machine:
+socat TCP-LISTEN:2222,fork,reuseaddr TCP:192.168.1.100:22
+```
+
+Then from inside the devcontainer:
+
+```sh
+VERNA_TEST_SSH_HOST=host.docker.internal VERNA_TEST_SSH_PORT=2222 go test -v -timeout 300s ./integration_test/
+```
+
 ## Contributing
 
 verna is open source, but closed contribution. It's designed for my personal needs and preferences. You may submit issues, but unless your needs and preferences align exactly with mine it is unlikely they will be accepted. Please do not submit PR's. In the unlikely event that a suggested change is accepted, then I will implement it myself.
