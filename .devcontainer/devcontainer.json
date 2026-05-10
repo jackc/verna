@@ -1,7 +1,20 @@
 {
-	"name": "verna",
+	"name": "${localWorkspaceFolderBasename}",
 	"dockerComposeFile": "docker-compose.yml",
 	"service": "app",
-	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-  "postCreateCommand": ".devcontainer/post-create.bash"
+	"workspaceFolder": "/workspaces/verna",
+
+	"initializeCommand": "docker volume create devstate-shared-verna >/dev/null",
+
+	"containerEnv": {
+		"CLAUDE_CONFIG_DIR": "/persist/shared/claude",
+		"GOPATH":            "/persist/shared/go",
+		"GOCACHE":           "/persist/shared/go-build",
+		"MISE_DATA_DIR":     "/persist/shared/mise/data",
+		"MISE_CACHE_DIR":    "/persist/shared/mise/cache",
+		"ATUIN_CONFIG_DIR":  "/persist/shared/atuin/config",
+		"ATUIN_DATA_DIR":    "/persist/shared/atuin/data"
+	},
+
+	"postCreateCommand": ".devcontainer/post-create.bash"
 }

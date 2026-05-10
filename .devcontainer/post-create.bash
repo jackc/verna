@@ -1,15 +1,22 @@
 #!/bin/bash
 set -e
 
-# Run any additional setup scripts included in the shared/devcontainer directory. This is to allow for per developer or
-# per-environment customizations. These scripts are not checked into source control.
-if [ -x "../shared/devcontainer/install" ]; then
-  ../shared/devcontainer/install
+# Persistent volumes are mounted root-owned and empty on first attach.
+sudo chown vscode:vscode /persist/local /persist/shared
+
+# Pre-create every subdirectory referenced by containerEnv (plus
+# devcontainer-downloads / .scratch / devcontainer for the hooks below).
+mkdir -p /persist/shared/{claude,go,go-build,mise/{data,cache},atuin/{config,data},devcontainer-downloads,.scratch,devcontainer}
+
+# Per-developer / per-environment customization hook. Was previously sourced
+# from a sibling host directory at ../shared/devcontainer/install; now lives on
+# the shared volume so it survives rebuilds and is shared across worktrees.
+if [ -x /persist/shared/devcontainer/install ]; then
+  /persist/shared/devcontainer/install
 fi
 
-# Create a symlink to the shared .scratch directory for temporary files if it exists.
-if [ -x "../shared/.scratch" ]; then
-  if [ ! -e .scratch ] && [ ! -L .scratch ]; then
-    ln -s ../shared/.scratch
-  fi
+# Symlink the shared scratch dir into the workspace root for convenience. Was
+# previously ../shared/.scratch; now /persist/shared/.scratch.
+if [ ! -e .scratch ] && [ ! -L .scratch ]; then
+  ln -s /persist/shared/.scratch
 fi

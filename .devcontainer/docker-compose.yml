@@ -5,7 +5,20 @@ services:
       dockerfile: Dockerfile
 
     volumes:
-      - ../..:/workspaces:cached
+      - ..:/workspaces/verna:cached
+      - devstate-local:/persist/local
+      - devstate-shared:/persist/shared
 
     # Overrides default command so things don't shut down after the process ends.
     command: sleep infinity
+
+volumes:
+  # Per-container persistence; Compose prefixes this with COMPOSE_PROJECT_NAME,
+  # which VS Code derives per-instance, so each devcontainer gets its own.
+  devstate-local:
+
+  # Shared across all containers for this project; pre-created in
+  # devcontainer.json's initializeCommand so the exact name is used as-is.
+  devstate-shared:
+    name: devstate-shared-verna
+    external: true
